@@ -212,13 +212,6 @@ export function ChartView ({ el, uidp = 'c-' }) {
         }
       })
     }
-    if (holeK && o.center !== false && (o.labels || o.center)) {
-      const big = Math.min(hx * 0.55, fs * 2.4)
-      parts.push(
-        <text x={cx} y={cy + big * 0.25} text-anchor="middle" font-size={big} font-weight="700" fill={textColor}>{o.centerText || fmtNum(vals.reduce((x, y) => x + y, 0))}</text>,
-        <text x={cx} y={cy + big * 0.25 + fs * 1.25} text-anchor="middle" font-size={fs * 0.85} fill={muted}>{o.centerLabel ?? s.name ?? ''}</text>
-      )
-    }
     return svg()
   }
 

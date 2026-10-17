@@ -98,7 +98,8 @@ export async function chartPart (el, ctx) {
       }
     }
     if (type === 'line') {
-      const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr><a:ln w="31750" cap="rnd">${fillOf(seriesColor(el, si), 1, ctx)}<a:round/></a:ln>${deep ? shadow(ctx) : ''}</c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${fillOf(seriesColor(el, si), 1, ctx)}<a:ln w="9525">${fillOf('lt1', 1, ctx)}</a:ln></c:spPr></c:marker>${dLbls('line', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val><c:smooth val="1"/></c:ser>`).join('')
+      const smooth = el.smooth ?? deep // the renderer's rule (render/chart.jsx)
+      const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr><a:ln w="31750" cap="rnd">${fillOf(seriesColor(el, si), 1, ctx)}<a:round/></a:ln>${deep ? shadow(ctx) : ''}</c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${fillOf(seriesColor(el, si), 1, ctx)}<a:ln w="9525">${fillOf('lt1', 1, ctx)}</a:ln></c:spPr></c:marker>${dLbls('line', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val><c:smooth val="${smooth ? 1 : 0}"/></c:ser>`).join('')
       plot = `<c:lineChart><c:grouping val="${g}"/><c:varyColors val="0"/>${sers}<c:marker val="1"/><c:axId val="500000001"/><c:axId val="500000002"/></c:lineChart>` + axes(ctx, ts, o, { valMin })
     } else {
       const sers = series.map((s, si) => {
