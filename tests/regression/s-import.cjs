@@ -3,7 +3,7 @@
 const path = require('path'), fs = require('fs')
 const JSZip = require('../../node_modules/jszip')
 const IMP = path.join(__dirname, 'imp')
-module.exports = async ({ page, ev, wait, errors, OUT }) => {
+module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
   const check = (ok, msg) => { console.log((ok ? 'ok   ' : 'FAIL ') + msg); if (!ok) errors.push(msg) }
   const sec = async (name, fn) => { try { await fn() } catch (e) { check(false, `${name} threw: ${(e.stack || e.message).split('\n').slice(0, 2).join(' | ')}`) } }
   await ev(`__pz.tour.loadTour(); __pz.store.backstage.value = null`)
@@ -80,6 +80,28 @@ module.exports = async ({ page, ev, wait, errors, OUT }) => {
     check(names(d.slides[0].elements).includes('R&D box') && names(d.slides[0].master).includes('Tom & Jerry'), 'names keep "&": ' + JSON.stringify([names(d.slides[0].elements), names(d.slides[0].master)]))
     const [a, b] = [d.slides[0].master, d.slides[1].elements].map(l => (l || []).find(e => e.type === 'chart')).map(c => JSON.stringify([c?.categories, c?.series?.map(s => s.name)]))
     check(a === '[["A&B","C<D"],["S&P"]]' && b === a, 'chart texts keep "&" and "<", on a layout too: ' + a + ' / ' + b)
+  })
+
+  await sec('reuse slides media', async () => {
+    // the other file's pictures go when the dialog closes, but for those the inserted slides use; nothing else goes
+    await open('ole.pptx')
+    await app.evaluate(({ dialog }, fp) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fp] }) }, path.join(IMP, 'ole.pptx'))
+    const spare = await ev(`__pz.store.addMedia(new Uint8Array([1, 2, 3]), 'image/png')`) // used by no slide, as after an undo
+    const media = () => ev(`(() => { const j = JSON.stringify(__pz.store.doc.value); return [...__pz.store.allMedia().keys()].map(id => [id, j.includes('"' + id + '"')]) })()`)
+    const before = new Set((await media()).map(([id]) => id))
+    const reuse = async close => {
+      await ev(`__pz.store.ribbonTab.value = 'home'`); await wait(150)
+      await page.getByRole('button', { name: 'New slide options' }).first().click(); await wait(250)
+      await page.locator('.pop button, .pop .mi, .pop [role=menuitem]', { hasText: 'Slides from another presentation' }).first().click()
+      await page.waitForSelector('.dlg-reuse', { timeout: 15000 })
+      await close(); await wait(300)
+      const now = await media()
+      return { kept: [...before].every(id => now.some(([x]) => x === id)), fresh: now.filter(([id]) => !before.has(id)) }
+    }
+    const c = await reuse(() => ev(`__pz.store.closeDialog()`))
+    check(before.has(spare) && c.kept && !c.fresh.length, 'closing the dialog frees the other file\'s pictures and nothing else: ' + JSON.stringify(c))
+    const i = await reuse(() => page.locator('.dlg-reuse .reuse-item').first().dblclick())
+    check(i.kept && i.fresh.length === 1 && i.fresh[0][1], 'inserting a slide keeps its picture and frees the others: ' + JSON.stringify(i))
   })
 
   await sec('prizma files', async () => {
