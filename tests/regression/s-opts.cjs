@@ -62,6 +62,9 @@ module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
   const sp2 = await ev(`document.querySelector('[data-editor] [contenteditable], .pz-editing')?.getAttribute('spellcheck')`)
   await ev(`__pz.store.editing.value = null; __pz.store.settings.value = { ...__pz.store.settings.value, spellcheck: true }`)
   check(sp1 === 'true' && sp2 === 'false', `spell check on/off reaches the text editor: ${sp1}/${sp2}`)
+  const notesSp = async v => { await ev(`__pz.store.showNotes.value = true; __pz.store.settings.value = { ...__pz.store.settings.value, spellcheck: ${v} }`); await wait(150); return ev(`document.querySelector('.notes textarea')?.getAttribute('spellcheck')`) }
+  const ns = [await notesSp(false), await notesSp(true)].join('/')
+  check(ns === 'false/true', `spell check on/off reaches the notes box: ${ns}`)
 
   // smart guides: a drag that ends 3 pt off another shape's edge snaps only when they are on
   const dragTest = async () => {

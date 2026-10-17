@@ -2,7 +2,7 @@
 import { useRef, useState, useEffect } from 'preact/hooks'
 import { computed } from '@preact/signals'
 import {
-  doc, file, dirty, slideIdx, slide, canUndo, canRedo, zoom, fitZoom, view, pane, showNotes, searchOpen, appInfo, busy, focusArea, native
+  doc, file, dirty, slideIdx, slide, canUndo, canRedo, zoom, fitZoom, view, pane, showNotes, searchOpen, appInfo, busy, focusArea, native, settings
 } from '../core/store.js'
 import { Icon } from './Icon.jsx'
 import { Btn, Slider } from './controls.jsx'
@@ -142,7 +142,7 @@ export function Notes () {
   if (!s) return null
   return (
     <div class="notes">
-      <textarea ref={ref} value={val} placeholder="Click to add notes" spellcheck={true}
+      <textarea ref={ref} value={val} placeholder="Click to add notes" spellcheck={settings.value.spellcheck !== false}
         onFocus={() => { focusArea.value = 'notes' }}
         onInput={e => { setVal(e.currentTarget.value); A.setNotes(e.currentTarget.value) }} />
     </div>
