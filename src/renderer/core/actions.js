@@ -336,7 +336,7 @@ export function selectAll () {
 
 // ---------------- clipboard ----------------
 const clip = { at: 0, text: '', payload: null }
-function collectMedia (els) {
+async function collectMedia (els) {
   const ids = new Set()
   const scan = e => {
     if (e.src) ids.add(e.src); if (e.poster) ids.add(e.poster); if (e.fill?.src) ids.add(e.fill.src); e.children?.forEach(scan)
@@ -344,29 +344,28 @@ function collectMedia (els) {
   }
   els.forEach(scan)
   const out = {}
-  for (const id of ids) { const m = mediaInfo(id); if (m) out[id] = { mime: m.mime, b64: m.bytes.length < 30e6 ? bytesToBase64(m.bytes) : null } }
+  await Promise.all([...ids].map(async id => { const m = mediaInfo(id); if (m) out[id] = { mime: m.mime, b64: m.bytes.length < 30e6 ? await bytesToBase64(m.bytes).catch(() => null) : null } }))
   return out
 }
 const WIN = uid('w')
+// A cut removes the objects at once: writing the clipboard takes a while, and the selection may change meanwhile
 export async function copySelection (cut = false) {
   const s = slide.value
   const els = topSelection().map(id => findEl(s, id)?.el).filter(Boolean)
   if (!els.length) return false
   const flat = els.map(e => JSON.parse(JSON.stringify(onSlide(s, e)))) // group children as they show on the slide
-  const payload = { kind: 'elements', win: WIN, elements: flat, media: collectMedia(els), slideId: s.id }
-  await writeClipboard(payload, els.map(e => textOf(e.html || '')).filter(Boolean).join('\n'))
+  const media = collectMedia(els)
   if (cut) deleteSelected()
+  await writeClipboard({ kind: 'elements', win: WIN, elements: flat, media: await media, slideId: s.id }, els.map(e => textOf(e.html || '')).filter(Boolean).join('\n'))
   return true
 }
 export async function copySlides (ids, cut = false) {
   const d = doc.value
   const slides = d.slides.filter(s => ids.includes(s.id))
   if (!slides.length) return
-  const els = slides.flatMap(s => [...s.elements, ...(s.master || [])])
-  const payload = { kind: 'slides', win: WIN, slides: JSON.parse(JSON.stringify(slides)), media: collectMedia(els), size: d.size }
-  if (slides.some(s => s.bg?.src)) Object.assign(payload.media, collectMedia(slides.map(s => ({ fill: s.bg }))))
-  await writeClipboard(payload, slides.map(s => s.elements.map(e => textOf(e.html || '')).join('\n')).join('\n\n'))
+  const media = collectMedia(slides.flatMap(s => [...s.elements, ...(s.master || []), ...(s.bg ? [{ fill: s.bg }] : [])]))
   if (cut) deleteSlides(ids)
+  await writeClipboard({ kind: 'slides', win: WIN, slides: JSON.parse(JSON.stringify(slides)), media: await media, size: d.size }, slides.map(s => s.elements.map(e => textOf(e.html || '')).join('\n')).join('\n\n'))
 }
 async function writeClipboard (payload, text) {
   clip.at = Date.now(); clip.text = text || ' '; clip.payload = payload

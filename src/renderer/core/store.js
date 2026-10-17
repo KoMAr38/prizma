@@ -161,12 +161,13 @@ export function dataUrlToBytes (dataUrl) {
   }
   return { bytes: new TextEncoder().encode(decodeURIComponent(m[3])), mime }
 }
-export function bytesToBase64 (bytes) {
-  let s = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
-  return btoa(s)
-}
+// FileReader encodes off the main thread: btoa on a big picture held the window still for seconds
+export const bytesToBase64 = bytes => new Promise((resolve, reject) => {
+  const r = new FileReader()
+  r.onload = () => resolve(r.result.slice(r.result.indexOf(',') + 1))
+  r.onerror = () => reject(r.error)
+  r.readAsDataURL(new Blob([bytes]))
+})
 
 // ---------- mutations ----------
 export function update (recipe, opts = {}) {
