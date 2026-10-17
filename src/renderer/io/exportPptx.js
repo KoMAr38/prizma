@@ -319,6 +319,9 @@ function tableXml (el, c, off) {
   const nR = rows.length, nC = cols.length
   const ts = { font: '+minor', size: 14, color: 'dk1', ...(el.ts || {}) }
   const st = { header: true, banded: true, ...(el.style || {}) }
+  // a table has no transparency of its own in PowerPoint: every fill, border and text carries it
+  const op = el.opacity ?? 1
+  const tc = op < 1 ? { ...c, alpha: op } : c
   // cells covered by a merge: PowerPoint marks them hMerge (to the right of the anchor) / vMerge (below)
   const cover = Array.from({ length: nR }, () => Array(nC).fill(null))
   for (let r = 0; r < nR; r++) {
@@ -340,16 +343,16 @@ function tableXml (el, c, off) {
       const lines = ['left', 'right', 'top', 'bottom'].map(side => {
         const b = cell.borders?.[side] || look.borders?.[side]
         const t = LN_TAG[side]
-        return b && b.width && b.color ? `<a:${t} w="${emuPos(b.width)}">${solidXml(b.color, 1, c.theme)}<a:prstDash val="${b.dash && b.dash !== 'solid' ? 'dash' : 'solid'}"/></a:${t}>` : ''
+        return b && b.width && b.color ? `<a:${t} w="${emuPos(b.width)}">${solidXml(b.color, op, c.theme)}<a:prstDash val="${b.dash && b.dash !== 'solid' ? 'dash' : 'solid'}"/></a:${t}>` : ''
       }).join('')
-      const fill = cell.fill ? fillXml(cell.fill, c, 1) : look.fill ? solidXml(look.fill, 1, c.theme) : '<a:noFill/>'
+      const fill = cell.fill ? fillXml(cell.fill, c, op) : look.fill ? solidXml(look.fill, op, c.theme) : '<a:noFill/>'
       const anchor = cell.vAlign === 'middle' ? 'ctr' : cell.vAlign === 'bottom' ? 'b' : 't'
-      return `<a:tc${span}><a:txBody><a:bodyPr/><a:lstStyle/>${parasXml(cv ? '' : cell.html, base, c)}</a:txBody><a:tcPr marL="${emuPos(ins.l)}" marR="${emuPos(ins.r)}" marT="${emuPos(ins.t)}" marB="${emuPos(ins.b)}" anchor="${anchor}">${lines}${fill}</a:tcPr></a:tc>`
+      return `<a:tc${span}><a:txBody><a:bodyPr/><a:lstStyle/>${parasXml(cv ? '' : cell.html, base, tc)}</a:txBody><a:tcPr marL="${emuPos(ins.l)}" marR="${emuPos(ins.r)}" marT="${emuPos(ins.t)}" marB="${emuPos(ins.b)}" anchor="${anchor}">${lines}${fill}</a:tcPr></a:tc>`
     }).join('')
     return `<a:tr h="${emuPos(rh)}">${tcs}</a:tr>`
   }).join('')
   // "No Style, No Grid": every colour and border is written on the cells, exactly as Prizma draws them
-  const tbl = `<a:tbl><a:tblPr firstRow="${st.header ? 1 : 0}" bandRow="${st.banded ? 1 : 0}"><a:tableStyleId>{2D5ABB26-0587-4C30-8999-92F81FD0307C}</a:tableStyleId></a:tblPr><a:tblGrid>${cols.map(w => `<a:gridCol w="${emuPos(w)}"/>`).join('')}</a:tblGrid>${trs}</a:tbl>`
+  const tbl = `<a:tbl><a:tblPr firstRow="${st.header ? 1 : 0}" bandRow="${st.banded ? 1 : 0}">${effectsXml(el, c)}<a:tableStyleId>{2D5ABB26-0587-4C30-8999-92F81FD0307C}</a:tableStyleId></a:tblPr><a:tblGrid>${cols.map(w => `<a:gridCol w="${emuPos(w)}"/>`).join('')}</a:tblGrid>${trs}</a:tbl>`
   return `<p:graphicFrame><p:nvGraphicFramePr>${cNvPr(el, c, id)}<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>${xfrmXml(el, { tag: 'p:xfrm', off })}<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">${tbl}</a:graphicData></a:graphic></p:graphicFrame>`
 }
 async function chartXml (el, c, off) {
@@ -357,7 +360,7 @@ async function chartXml (el, c, off) {
   c.targets.set(el.id, { spid: id, sp: false })
   const env = c.env
   const n = ++env.charts
-  const { xml, xlsx } = await chartPart(el, { theme: c.theme, lang: c.lang })
+  const { xml, xlsx } = await chartPart(el, { theme: c.theme, lang: c.lang, alpha: el.opacity ?? 1 })
   const part = `ppt/charts/chart${n}.xml`
   env.pkg.part(part, xml, OX + 'drawingml.chart+xml')
   env.pkg.bin(`ppt/embeddings/Microsoft_Excel_Worksheet${n}.xlsx`, xlsx, OX + 'spreadsheetml.sheet')
