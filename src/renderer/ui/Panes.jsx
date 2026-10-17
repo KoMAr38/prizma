@@ -404,7 +404,7 @@ export function CommentsPane () {
         <div class="cm-new">
           <span class="avatar">{me.slice(0, 1).toUpperCase()}</span>
           <div class="cm-box">
-            <textarea value={text} placeholder="Add a comment…" rows={3} onInput={e => setText(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) post() }} />
+            <textarea value={text} placeholder="Add a comment…" rows={3} spellcheck={settings.value.spellcheck !== false} onInput={e => setText(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) post() }} />
             <div class="cm-actions"><span class="fe-note">Ctrl+Enter to post</span><button class="btn btn-primary btn-sm" disabled={!text.trim()} onClick={post}>Post</button></div>
           </div>
         </div>
