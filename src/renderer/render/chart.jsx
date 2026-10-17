@@ -17,7 +17,7 @@ export const CHART_TYPES = [
 ]
 const ACCENTS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6']
 export const seriesColor = (el, i) => el.series[i]?.color || (el.colors && el.colors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
-const catColor = (el, i) => (el.pointColors && el.pointColors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
+export const catColor = (el, i) => (el.pointColors && el.pointColors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
 export const chartLook = el => el.look || '3d'
 // X values of a scatter chart as numbers, or null when some are text (then the points sit at 1, 2, 3…, as in Excel)
 export const xNumbers = cats => { const xs = cats.map(c => Number(String(c ?? '').trim().replace(',', '.'))); return cats.length && cats.every(c => String(c ?? '').trim() !== '') && xs.every(Number.isFinite) ? xs : null }

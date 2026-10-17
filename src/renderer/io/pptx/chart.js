@@ -3,10 +3,8 @@
 import JSZip from 'jszip'
 import { esc, colorXml, solidXml, effectsXml, XML_HEAD, NS } from './xml.js'
 import { fontXml } from './text.js'
-import { seriesColor, xNumbers } from '../../render/chart.jsx'
+import { seriesColor, catColor, xNumbers } from '../../render/chart.jsx'
 
-const ACCENTS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6']
-const catColor = (el, i) => (el.pointColors && el.pointColors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
 const colName = i => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26) } return s }
 const num = v => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : 0 }
 // the chart's colours, faded by its transparency (ctx.alpha)

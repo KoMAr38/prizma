@@ -15,7 +15,7 @@ export const NS = {
 export const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 export const NS_APR = `xmlns:a="${NS.a}" xmlns:r="${NS.r}" xmlns:p="${NS.p}"`
 
-export const EMU_PER_PT = 12700
+const EMU_PER_PT = 12700
 // last line of defence: a broken size never writes NaN, Infinity or a number too large for the file (ST_Coordinate)
 export const emu = pt => { const v = Math.round((Number(pt) || 0) * EMU_PER_PT); return Number.isFinite(v) ? Math.max(-27273042329600, Math.min(27273042316900, v)) : 0 }
 export const emuPos = pt => Math.max(0, emu(pt))
@@ -147,7 +147,7 @@ export const PRESETS = new Set(('line lineInv triangle rtTriangle rect diamond p
 // Adjustment values: our model keeps fractions/degrees, PowerPoint wants named guides in its own units.
 const ADJ_ONE = new Set(['roundRect', 'snip1Rect', 'round1Rect', 'triangle', 'parallelogram', 'trapezoid', 'hexagon', 'octagon', 'diagStripe', 'plus', 'plaque', 'donut', 'foldedCorner', 'moon', 'homePlate', 'chevron', 'noSmoking', 'can', 'cube', 'bevel'])
 const ADJ_STAR = new Set(['star4', 'star5', 'star6', 'star7', 'star8', 'star10', 'star12', 'star16', 'star24', 'star32'])
-export function avLstXml (shape, adj) {
+function avLstXml (shape, adj) {
   if (!adj || !Object.keys(adj).length) return '<a:avLst/>'
   const gd = (n, v) => `<a:gd name="${n}" fmla="val ${Math.round(v)}"/>`
   const f = v => (Number(v) || 0) * 100000
@@ -211,7 +211,7 @@ function arcToCubics (x1, y1, rx, ry, phi, large, sweep, x2, y2) {
 }
 const PARAMS = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 }
 // Returns a list of sub-path command strings (one <a:path> may hold several sub-paths)
-export function svgPathToDml (d, sx, sy) {
+function svgPathToDml (d, sx, sy) {
   const toks = String(d || '').match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?)(?:e[-+]?\d+)?/gi) || []
   let i = 0, cmd = '', cx = 0, cy = 0, sx0 = 0, sy0 = 0, lastC = null, lastQ = null
   const P = (x, y) => `<a:pt x="${Math.round(x * sx)}" y="${Math.round(y * sy)}"/>`

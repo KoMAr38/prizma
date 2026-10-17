@@ -8,7 +8,7 @@ import { chartPart } from './pptx/chart.js'
 import { transitionXml, timingXml } from './pptx/anim.js'
 import { mediaInfo, settings, appInfo, redraw } from '../core/store.js'
 import { imageSize } from '../core/actions.js'
-import { walk, luminance, ELEMENT_LABEL, solid } from '../core/model.js'
+import { walk, findEl, luminance, ELEMENT_LABEL, solid } from '../core/model.js'
 import { SHAPES, shapeParts, pathDriven, linePath, picShape } from '../core/shapes.js'
 import { LAYOUTS, layoutPlaceholders, themeSpec, slideDecor, PROMPTS } from '../core/themes.js'
 import { tableCellLook } from '../render/tableStyles.js'
@@ -543,10 +543,10 @@ function themeXml (name, scheme, fonts) {
 const OFFICE = { dk1: '#000000', lt1: '#FFFFFF', dk2: '#44546A', lt2: '#E7E6E6', accent1: '#4472C4', accent2: '#ED7D31', accent3: '#A5A5A5', accent4: '#FFC000', accent5: '#5B9BD5', accent6: '#70AD47', hlink: '#0563C1', folHlink: '#954F72' }
 
 // ---------- masters ----------
+// The nine plain paragraph levels PowerPoint's own files carry (default text, other text, notes)
+const plainLevels = sz => Array.from({ length: 9 }, (_, i) => `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="${sz}" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`).join('')
 function defaultTextStyle (lang) {
-  let lv = ''
-  for (let i = 0; i < 9; i++) lv += `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1800" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`
-  return `<p:defaultTextStyle><a:defPPr><a:defRPr lang="${lang}"/></a:defPPr>${lv}</p:defaultTextStyle>`
+  return `<p:defaultTextStyle><a:defPPr><a:defRPr lang="${lang}"/></a:defPPr>${plainLevels(1800)}</p:defaultTextStyle>`
 }
 function masterXml (env, c, variants, clrMap) {
   const spec = env.spec || themeSpec({ id: 'blank' })
@@ -557,7 +557,7 @@ function masterXml (env, c, variants, clrMap) {
   const hf = hfShape('dt', 2, c, r => dateField(r, today())) + hfShape('ftr', 3, c, () => '') + hfShape('sldNum', 4, c, r => numField(r, '‹#›'))
   const bg = bgXml(env.spec ? spec.bg.content : solid('lt1'), c)
   const ids = variants.map((v, i) => `<p:sldLayoutId id="${2147483649 + i}" r:id="${c.rels.add(REL.layout, `../slideLayouts/slideLayout${v.n}.xml`)}"/>`).join('')
-  const other = `<a:defPPr><a:defRPr lang="${c.lang}"/></a:defPPr>` + Array.from({ length: 9 }, (_, i) => `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1800" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`).join('')
+  const other = `<a:defPPr><a:defRPr lang="${c.lang}"/></a:defPPr>` + plainLevels(1800)
   return `${XML_HEAD}<p:sldMaster ${NS_APR}><p:cSld>${bg}<p:spTree>${GRP}${title}${body}${hf}</p:spTree></p:cSld><p:clrMap ${clrMap} ${ACC}/><p:sldLayoutIdLst>${ids}</p:sldLayoutIdLst>` +
     `<p:txStyles><p:titleStyle>${levelsXml(titleTs, c, false, 9)}</p:titleStyle><p:bodyStyle>${levelsXml(bodyTs, c, true, 9)}</p:bodyStyle><p:otherStyle>${other}</p:otherStyle></p:txStyles></p:sldMaster>`
 }
@@ -617,8 +617,6 @@ function notesMasterXml (env) {
   const W = env.W, H = env.H
   const imgW = 5486400, imgH = Math.round(imgW * H / W), imgY = Math.max(457200, Math.round((4400550 - imgH) / 2) + 228600)
   const ph = (id, name, type, idx, x, y, cx, cy, text = '', extra = '') => `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr><a:spLocks noGrp="1"${type === 'sldImg' ? ' noRot="1" noChangeAspect="1"' : ''}/></p:cNvSpPr><p:nvPr><p:ph type="${type}"${type === 'sldImg' ? '' : ' sz="quarter"'} idx="${idx}"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${extra}</p:spPr>${type === 'sldImg' ? '' : `<p:txBody><a:bodyPr vert="horz" lIns="91440" tIns="45720" rIns="91440" bIns="45720" rtlCol="0"/><a:lstStyle/><a:p>${text}<a:endParaRPr lang="${env.lang}"/></a:p></p:txBody>`}</p:sp>`
-  let lv = ''
-  for (let i = 0; i < 9; i++) lv += `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1200" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`
   return `${XML_HEAD}<p:notesMaster ${NS_APR}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${GRP}` +
     ph(2, 'Header Placeholder 1', 'hdr', 0, 0, 0, 2971800, 458788) +
     ph(3, 'Date Placeholder 2', 'dt', 1, 3884613, 0, 2971800, 458788) +
@@ -626,7 +624,7 @@ function notesMasterXml (env) {
     ph(5, 'Notes Placeholder 4', 'body', 3, 685800, 4400550, 5486400, 3600450, `<a:r><a:rPr lang="${env.lang}"/><a:t>Click to edit Master text styles</a:t></a:r>`) +
     ph(6, 'Footer Placeholder 5', 'ftr', 4, 0, 8685213, 2971800, 458787) +
     ph(7, 'Slide Number Placeholder 6', 'sldNum', 5, 3884613, 8685213, 2971800, 458787, `<a:fld id="${guid()}" type="slidenum"><a:rPr lang="${env.lang}"/><a:t>‹#›</a:t></a:fld>`) +
-    `</p:spTree></p:cSld><p:clrMap ${CLRMAP_STD} ${ACC}/><p:notesStyle>${lv}</p:notesStyle></p:notesMaster>`
+    `</p:spTree></p:cSld><p:clrMap ${CLRMAP_STD} ${ACC}/><p:notesStyle>${plainLevels(1200)}</p:notesStyle></p:notesMaster>`
 }
 function notesXml (slide, lang) {
   const paras = String(slide.notes || '').split(/\r?\n/).map(line => `<a:p>${line ? `<a:r><a:rPr lang="${lang}" dirty="0"/><a:t>${esc(line)}</a:t></a:r>` : ''}<a:endParaRPr lang="${lang}" dirty="0"/></a:p>`).join('')
@@ -755,7 +753,7 @@ export async function exportPptx (d, { kind = 'pptx' } = {}) {
         if (!authors.has(name)) authors.set(name, { id: authors.size, last: 0 })
         const a = authors.get(name)
         a.last++
-        const at = cm.el ? walkFind(s.elements, cm.el) : null
+        const at = cm.el ? findEl(s, cm.el)?.el : null
         const x = at ? Math.round((at.x + at.w) * 8) : 80, y = at ? Math.round(at.y * 8) : 80
         // dt has no zone: PowerPoint and our reader take it as local time
         const t = new Date(cm.time || Date.now())
@@ -818,8 +816,3 @@ export async function exportPptx (d, { kind = 'pptx' } = {}) {
   return pkg.zip // written out piece by piece by the caller (files.js)
 }
 const escText = s => s.replace(/[\uFFFE\uFFFF]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-function walkFind (list, id) {
-  let hit = null
-  walk(list, e => { if (e.id === id) { hit = e; return false } })
-  return hit
-}
