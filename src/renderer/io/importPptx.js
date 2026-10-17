@@ -895,11 +895,13 @@ function convert (e, ctx) {
 function convertEl (e, ctx) {
   const sinfo = e.id ? (ctx.keyed ? ctx.info.shapes[e.id + '|' + e.name] : ctx.info.shapes[e.id]) : null
   const meta = e.id ? ctx.info.meta?.[e.id] : null
-  // objects paired for Morph ("!!" names) share one id across slides, as they do in Prizma
+  // objects paired for Morph ("!!" names) share one id across slides, as they do in Prizma; a second object of the
+  // same name on one slide keeps an id of its own
   let id = uid(), name = meta?.name || e.name
   if (ctx.morph && /^!!/.test(name || '')) {
-    id = ctx.morph.get(name) || id
-    ctx.morph.set(name, id)
+    if (!ctx.morph.has(name)) ctx.morph.set(name, id)
+    else if (!ctx.morphUsed.has(ctx.morph.get(name))) id = ctx.morph.get(name)
+    ctx.morphUsed.add(id)
     name = name.replace(/^!!/, '').replace(/ [0-9a-z]{1,4}$/, '')
   }
   const base = { id, x: e.left || 0, y: e.top || 0, w: e.width || 0, h: e.height || 0, rot: e.rotate || 0, ...(e.isFlipH ? { flipH: true } : {}), ...(e.isFlipV ? { flipV: true } : {}), name, ...(meta?.descr ? { alt: meta.descr } : {}), ...(meta?.hidden ? { hidden: true } : {}) }
@@ -1128,7 +1130,7 @@ export async function importPptx (buffer, onProgress) {
   const slides = info.slides.map((sinfo, i) => {
     const s = json.slides[parsed.indexOf(info.slidePaths[i])] || {}
     const ids = new Map()
-    const ctx = { info: sinfo, media, pending, ids, morph, fixHref, zip }
+    const ctx = { info: sinfo, media, pending, ids, morph, morphUsed: new Set(), fixHref, zip }
     const byOrder = arr => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     let elements = byOrder(s.elements).map(e => convert(e, ctx)).filter(Boolean)
     const has = (set, e) => e.name !== undefined ? set.has(e.id + '|' + e.name) : [...set].some(k => k.startsWith(e.id + '|'))

@@ -112,6 +112,12 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     check(got.every(g => g === want), 'file links are kept, script and data links are not, after saving too:\n      ' + got.join('\n      '))
   })
 
+  await sec('morph names', async () => {
+    // "!!Box" twice on slide 1 and once on slide 2: one id per slide pairs them, never two on one slide
+    const [a, b] = (await open('morph.pptx')).doc.slides.map(s => s.elements.filter(e => e.name === 'Box').map(e => e.id))
+    check(a.length === 2 && a[0] !== a[1] && b.length === 1 && b[0] === a[0], 'a Morph name used twice on a slide gives two ids, the first pairs with the next slide: ' + JSON.stringify([a, b]))
+  })
+
   await sec('reuse slides media', async () => {
     // the other file's pictures go when the dialog closes, but for those the inserted slides use; nothing else goes
     await open('ole.pptx')
