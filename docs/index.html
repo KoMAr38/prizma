@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prizma: presentations for Windows</title>
+<meta name="description" content="Prizma opens and saves PowerPoint files, with Morph, animations and presenter view. $9.99, paid once. Free 15-day trial.">
+<meta property="og:title" content="Prizma: presentations for Windows">
+<meta property="og:description" content="Opens and saves PowerPoint files. Morph, animations, presenter view. $9.99, paid once.">
+<meta property="og:image" content="img/editor.jpg">
+<link rel="icon" href="img/icon-64.png">
+<style>
+@font-face { font-family: Manrope; src: url(fonts/manrope-latin.woff2) format('woff2'); font-weight: 200 800; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: Manrope; src: url(fonts/manrope-latin-ext.woff2) format('woff2'); font-weight: 200 800; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: Unbounded; src: url(fonts/unbounded-latin.woff2) format('woff2'); font-weight: 200 900; }
+:root {
+  --night: #070b14; --panel: #0d1424; --line: #1c2740; --ink: #e9eef7; --muted: #9aa6bb;
+  --aurora: #5eead4; --aurora-ink: #04201c; --violet: #8b7cf6;
+  --display: Unbounded, 'Segoe UI', sans-serif; --body: Manrope, 'Segoe UI', sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--night); }
+body { margin: 0; background: var(--night); color: var(--ink); font: 400 18px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+a { color: var(--aurora); }
+a:focus-visible, .btn:focus-visible { outline: 3px solid var(--aurora); outline-offset: 3px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+header.top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+.brand { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; font: 700 22px/1 var(--display); }
+.brand img { width: 36px; height: 36px; }
+.btn { display: inline-block; padding: 14px 24px; border-radius: 10px; background: var(--aurora); color: var(--aurora-ink); font: 800 17px/1.2 var(--body); text-decoration: none; border: 0; }
+.btn:hover { background: #8ef3e1; }
+.btn[aria-disabled="true"] { background: var(--panel); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); cursor: default; }
+.btn.small { padding: 10px 18px; font-size: 15px; }
+.hero { padding: 64px 0 40px; }
+.hero h1 { font: 700 clamp(40px, 6vw, 72px)/1.05 var(--display); letter-spacing: -0.01em; margin: 0 0 22px; max-width: 13ch; }
+.hero p.lede { color: var(--muted); font-size: 20px; max-width: 56ch; margin: 0 0 32px; }
+.buy { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; }
+.buy .price { color: var(--muted); font-size: 16px; }
+.buy .price strong { color: var(--ink); font-weight: 800; }
+.stage { position: relative; margin: 56px 0 24px; }
+.stage::before { content: ''; position: absolute; inset: -12% -6% 20%; background: radial-gradient(60% 55% at 30% 40%, rgba(94,234,212,.30), transparent 70%), radial-gradient(50% 60% at 78% 30%, rgba(139,124,246,.28), transparent 70%); filter: blur(30px); z-index: 0; }
+.stage video { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px var(--line); background: #000; }
+.note { color: var(--muted); font-size: 15px; text-align: center; margin: 0; }
+section { padding: 72px 0; }
+section h2 { font: 700 clamp(28px, 3.4vw, 40px)/1.15 var(--display); margin: 0 0 16px; }
+.row { display: grid; grid-template-columns: 5fr 7fr; gap: 48px; align-items: center; padding: 40px 0; border-top: 1px solid var(--line); }
+.row:nth-child(even) { grid-template-columns: 7fr 5fr; }
+.row:nth-child(even) .txt { order: 2; }
+.row h3 { font: 800 26px/1.25 var(--body); margin: 0 0 10px; }
+.row p { color: var(--muted); margin: 0; }
+.row img { width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px var(--line); display: block; }
+.price-block { background: var(--panel); border-radius: 16px; padding: 48px; box-shadow: inset 0 0 0 1px var(--line); }
+.price-block .amount { font: 700 clamp(44px, 6vw, 64px)/1 var(--display); margin: 8px 0 14px; }
+.price-block p { color: var(--muted); max-width: 60ch; margin: 0 0 28px; }
+dl.faq { margin: 0; }
+dl.faq dt { font-weight: 800; margin-top: 28px; }
+dl.faq dd { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 15px; }
+footer p { margin: 6px 0; }
+@media (max-width: 760px) {
+  body { font-size: 17px; }
+  .hero { padding-top: 32px; }
+  .row, .row:nth-child(even) { grid-template-columns: 1fr; gap: 20px; }
+  .row:nth-child(even) .txt { order: 0; }
+  .price-block { padding: 28px 22px; }
+  header.top .btn { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .stage video { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="img/icon-64.png" alt="">Prizma</a>
+    <a class="btn small store-link" href="#get">Try it free</a>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Presentations for Windows. Paid once.</h1>
+      <p class="lede">Prizma opens and saves PowerPoint files, restyles a whole deck in one click and presents with Morph, animations and presenter view. No account and no subscription.</p>
+      <div class="buy">
+        <a class="btn store-link" href="#get">Try it free for 15 days</a>
+        <span class="price"><strong>$9.99</strong> once, on the Microsoft Store</span>
+      </div>
+      <div class="stage">
+        <video src="img/show.mp4" poster="img/morph.jpg" autoplay muted loop playsinline aria-label="A Prizma slide show with the Morph transition and animated cards"></video>
+      </div>
+      <p class="note">A slide show made in Prizma, recorded straight from the app.</p>
+    </div>
+
+    <section aria-labelledby="what">
+      <h2 id="what">What you can do with it</h2>
+      <div class="rows">
+        <div class="row">
+          <div class="txt"><h3>Open your PowerPoint files</h3><p>Prizma opens and saves .pptx, .ppsx and .potx, so you can keep working with decks other people send you. It also opens PDFs, and older .ppt files when LibreOffice is installed.</p></div>
+          <img src="img/editor.jpg" alt="The Prizma editor with a slide titled Chasing the Northern Lights" loading="lazy">
+        </div>
+        <div class="row">
+          <div class="txt"><h3>Change the whole look in one click</h3><p>Pick another theme on the Design tab and every slide follows: colors, fonts and backgrounds. Ten themes come with the app.</p></div>
+          <img src="img/neon.jpg" alt="The same slide restyled with the Neon Grid theme" loading="lazy">
+        </div>
+        <div class="row">
+          <div class="txt"><h3>Morph, transitions and animations</h3><p>Duplicate a slide, move things around, choose Morph, and Prizma animates the difference. Bring in points one at a time with entrance animations.</p></div>
+          <img src="img/cards.jpg" alt="A slide with three cards named Plan, Travel and Enjoy" loading="lazy">
+        </div>
+        <div class="row">
+          <div class="txt"><h3>Share it the way you need</h3><p>Export to PDF or pictures, or save as a PowerPoint file. Presenter view shows your notes, the next slide and a timer, and you can draw on slides while you present.</p></div>
+          <img src="img/export.jpg" alt="The Export page with PDF, pictures and PowerPoint file types" loading="lazy">
+        </div>
+      </div>
+    </section>
+
+    <section id="get" aria-labelledby="price">
+      <div class="price-block">
+        <h2 id="price">One price, no subscription</h2>
+        <div class="amount">$9.99</div>
+        <p>Buy it once on the Microsoft Store and it is yours, updates included. Try every feature free for 15 days first. The Store shows the price in your own currency.</p>
+        <a class="btn store-link" href="#get" aria-disabled="true">Coming soon to the Microsoft Store</a>
+      </div>
+    </section>
+
+    <section aria-labelledby="faq">
+      <h2 id="faq">Questions</h2>
+      <dl class="faq">
+        <dt>Does it work with PowerPoint files?</dt>
+        <dd>Yes. Prizma opens and saves .pptx, .pptm, .ppsx and .potx files. Very complex decks can look slightly different, as with any presentation app that is not PowerPoint.</dd>
+        <dt>Do I need an account or an internet connection?</dt>
+        <dd>No. Prizma runs on your computer and works offline. It has no account and sends no data anywhere.</dd>
+        <dt>Which computers does it run on?</dt>
+        <dd>Windows 10 and Windows 11, 64-bit.</dd>
+        <dt>What happens when the trial ends?</dt>
+        <dd>Prizma stops opening until you buy it from the Microsoft Store. Your files stay where they are and open in any app that reads PowerPoint files.</dd>
+      </dl>
+    </section>
+  </main>
+
+  <footer>
+    <p>Prizma was created and vibe-coded by Marko Veselinović.</p>
+    <p>Prizma is not affiliated with Microsoft. PowerPoint is a trademark of Microsoft Corporation.</p>
+    <p><a href="privacy.html">Privacy</a> &nbsp; <a href="https://github.com/KoMAr38/prizma/issues">Report a problem</a></p>
+  </footer>
+</div>
+<script>
+// shortcut: the Store link goes in here once Prizma is live in the Microsoft Store
+const STORE_URL = ''
+if (STORE_URL) for (const a of document.querySelectorAll('.store-link')) {
+  a.href = STORE_URL; a.removeAttribute('aria-disabled')
+  if (a.textContent.startsWith('Coming soon')) a.textContent = 'Get Prizma on the Microsoft Store'
+}
+try { if (matchMedia('(prefers-reduced-motion: reduce)').matches) { const v = document.querySelector('.stage video'); v.removeAttribute('autoplay'); v.pause(); v.controls = true } } catch (e) {}
+</script>
+</body>
+</html>
