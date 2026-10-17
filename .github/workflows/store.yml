@@ -3,7 +3,7 @@ name: Microsoft Store package
 on:
   workflow_dispatch:
   push:
-    tags: ['store-*']
+    branches: [store]
 
 jobs:
   appx:
