@@ -9,6 +9,7 @@ import { textOf, FONT_SIZES, searchRe } from '../core/html.js'
 import * as A from '../core/actions.js'
 import { Icon, ICON_NAMES } from './Icon.jsx'
 import { NumField, Check, Radio, Select, Combo, TextInput, Field, unitFmt, unitParse, Swatch } from './controls.jsx'
+import { pop } from './popover.jsx'
 import { CHART_TYPES } from '../render/chart.jsx'
 import { activeEditor, applyRun, applyPara, liveState } from '../editor/richEdit.js'
 import { fmtState, fontLabel, setFontFace, setFontSize, textRun, textPara, CMDS, refitSoon } from '../app/commands.js'
@@ -24,7 +25,13 @@ export function Dialog ({ title, children, footer, width = 460, onClose = closeD
   useEffect(() => {
     const key = e => {
       const { onClose, onEnter } = live.current
-      if (e.key === 'Escape') { e.stopPropagation(); onClose() }
+      if (e.key === 'Escape' && !pop.value) { e.stopPropagation(); onClose() } // with a dropdown open, Esc closes only the dropdown
+      // Tab and Shift+Tab go round the dialog's own controls and never reach the window behind it
+      if (e.key === 'Tab') {
+        const f = [...ref.current.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')].filter(x => x.tabIndex >= 0 && !x.matches(':disabled') && x.getClientRects().length)
+        const i = f.indexOf(document.activeElement)
+        if (!ref.current.contains(document.activeElement) || i === (e.shiftKey ? 0 : f.length - 1)) { e.preventDefault(); f.at(e.shiftKey ? -1 : 0)?.focus() }
+      }
       // Enter on a focused Cancel or OK presses that button; anywhere else (a field, a picked item) it means OK, which
       // runs once the field has taken the typed value (its own Enter handler comes after this one) and the dialog has
       // re-rendered with it
