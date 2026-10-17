@@ -3,7 +3,7 @@ import { memo } from 'preact/compat'
 import { doc, slide, selection, selected, tool, pane, formatTab, theme as themeSig, lastColors, settings, oneStep } from '../../core/store.js'
 import { SHAPES, SHAPE_CATS, LINE_KINDS, shapeParts } from '../../core/shapes.js'
 import { LAYOUTS, newSlide, slideDecor } from '../../core/themes.js'
-import { hexColor, solid, DASHES, unionBounds, bounds } from '../../core/model.js'
+import { hexColor, solid, DASHES, DASH_LABEL, unionBounds, bounds } from '../../core/model.js'
 import * as A from '../../core/actions.js'
 import { Btn, Drop, Split, ColorBtn, ColorPicker, Gallery, PickGrid, NumField, unitFmt, unitParse, addRecentColor } from '../controls.jsx'
 import { Menu, closePop } from '../popover.jsx'
@@ -155,7 +155,7 @@ export const outlineMenu = () => [
   { header: 'Weight' },
   ...[0.25, 0.5, 0.75, 1, 1.5, 2.25, 3, 4.5, 6].map(w => ({ label: `${w} pt`, icon: <span class="wt-sample" style={{ height: Math.max(1, w * 1.1) + 'px' }} />, checked: firstLine()?.width === w, run: () => A.setLine({ width: w }) })),
   { header: 'Dashes' },
-  ...Object.keys(DASHES).map(k => ({ label: { solid: 'Solid', dash: 'Dash', dot: 'Round dot', dashDot: 'Dash dot', longDash: 'Long dash', longDashDot: 'Long dash dot', sysDash: 'Square dot', sysDot: 'Dot' }[k] || k, icon: <svg width="34" height="6"><line x1="0" y1="3" x2="34" y2="3" style={{ stroke: 'currentColor', strokeWidth: 2, strokeDasharray: DASHES[k] ? DASHES[k].map(v => v * 2).join(' ') : undefined }} /></svg>, checked: (firstLine()?.dash || 'solid') === k, run: () => A.setLine({ dash: k }) })),
+  ...Object.keys(DASHES).map(k => ({ label: DASH_LABEL[k] || k, icon: <svg width="34" height="6"><line x1="0" y1="3" x2="34" y2="3" style={{ stroke: 'currentColor', strokeWidth: 2, strokeDasharray: DASHES[k] ? DASHES[k].map(v => v * 2).join(' ') : undefined }} /></svg>, checked: (firstLine()?.dash || 'solid') === k, run: () => A.setLine({ dash: k }) })),
   { header: 'Arrows' },
   ...[['none', 'none', 'No arrows'], ['none', 'triangle', 'Arrow at end'], ['triangle', 'none', 'Arrow at start'], ['triangle', 'triangle', 'Arrows at both ends'], ['none', 'stealth', 'Stealth arrow'], ['oval', 'oval', 'Round ends'], ['diamond', 'diamond', 'Diamond ends']].map(([h, t, l]) => ({ label: l, run: () => A.setLine({ head: h, tail: t }) }))
 ]

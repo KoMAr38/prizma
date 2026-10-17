@@ -3,7 +3,7 @@ import { useState, useRef } from 'preact/hooks'
 import {
   doc, slide, selection, selected, pane, formatTab, select, updateEl, updateSlide, settings, appInfo, addMedia, theme as themeSig, editing, oneStep
 } from '../core/store.js'
-import { solid, hexColor, DASHES, ARROWS, ELEMENT_LABEL, walk, findEl, onSlide, recrop, uid } from '../core/model.js'
+import { solid, hexColor, DASHES, DASH_LABEL, ARROWS, ELEMENT_LABEL, walk, findEl, onSlide, recrop, uid } from '../core/model.js'
 import { slideBackground } from '../core/themes.js'
 import * as A from '../core/actions.js'
 import { Icon } from './Icon.jsx'
@@ -127,7 +127,6 @@ export function FillEditor ({ fill, onChange, picture = true, pattern = true, no
 
 function LineEditor ({ line, onChange }) {
   const has = !!(line && line.color && line.width !== 0)
-  const dashLabel = { solid: 'Solid', dash: 'Dash', dot: 'Round dot', dashDot: 'Dash dot', longDash: 'Long dash', longDashDot: 'Long dash dot', sysDash: 'Square dot', sysDot: 'Dot' }
   return (
     <div class="fill-ed">
       <Radio name="line" label="No line" checked={!has} onChange={() => onChange(null)} />
@@ -137,7 +136,7 @@ function LineEditor ({ line, onChange }) {
           <Field label="Color"><Swatch value={line.color} onPick={c => onChange({ color: c })} /></Field>
           <Field label="Transparency"><Slider value={Math.round((1 - (line.alpha ?? 1)) * 100)} onChange={v => onChange({ alpha: v ? 1 - v / 100 : undefined })} /></Field>
           <Field label="Width"><NumField value={line.width ?? 1} step={0.25} min={0} max={200} fmt={v => v + ' pt'} onChange={v => onChange({ width: v })} /></Field>
-          <Field label="Dash type"><Select value={line.dash || 'solid'} options={Object.keys(DASHES).map(k => ({ value: k, label: dashLabel[k] || k }))} onChange={v => onChange({ dash: v })} /></Field>
+          <Field label="Dash type"><Select value={line.dash || 'solid'} options={Object.keys(DASHES).map(k => ({ value: k, label: DASH_LABEL[k] || k }))} onChange={v => onChange({ dash: v })} /></Field>
           <Field label="Cap"><Select value={line.cap || 'flat'} options={[{ value: 'butt', label: 'Flat' }, { value: 'round', label: 'Round' }, { value: 'square', label: 'Square' }]} onChange={v => onChange({ cap: v })} /></Field>
           <Field label="Join"><Select value={line.join || 'round'} options={[{ value: 'round', label: 'Round' }, { value: 'bevel', label: 'Bevel' }, { value: 'miter', label: 'Miter' }]} onChange={v => onChange({ join: v })} /></Field>
           <Field label="Begin arrow"><Select value={line.head || 'none'} options={ARROWS.map(a => ({ value: a, label: a[0].toUpperCase() + a.slice(1) }))} onChange={v => onChange({ head: v })} /></Field>

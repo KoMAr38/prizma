@@ -116,6 +116,7 @@ export function fillCss (fill, mediaUrl) {
 export const DASHES = {
   solid: null, dash: [4, 3], dot: [1, 1], dashDot: [4, 3, 1, 3], longDash: [8, 3], longDashDot: [8, 3, 1, 3], sysDash: [3, 1], sysDot: [1, 1]
 }
+export const DASH_LABEL = { solid: 'Solid', dash: 'Dash', dot: 'Round dot', dashDot: 'Dash dot', longDash: 'Long dash', longDashDot: 'Long dash dot', sysDash: 'Square dot', sysDot: 'Dot' }
 export const ARROWS = ['none', 'triangle', 'arrow', 'stealth', 'diamond', 'oval']
 
 // ---------- element factories ----------
