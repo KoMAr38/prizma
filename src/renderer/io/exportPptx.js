@@ -72,14 +72,14 @@ const IMG = { 'image/png': ['png', 'image/png'], 'image/jpeg': ['jpeg', 'image/j
 const AV = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/x-msvideo': 'avi', 'video/x-ms-wmv': 'wmv', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/x-ms-wma': 'wma' }
 const AV_CT = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', avi: 'video/x-msvideo', wmv: 'video/x-ms-wmv', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', wma: 'audio/x-ms-wma' }
 
-const canvasPng = c => new Promise(resolve => c.toBlob(b => b ? b.arrayBuffer().then(a => resolve(new Uint8Array(a))) : resolve(null), 'image/png'))
-function draw (src, w, h, paint) {
+const canvasBytes = (c, type) => new Promise(resolve => c.toBlob(b => b ? b.arrayBuffer().then(a => resolve(new Uint8Array(a))) : resolve(null), type, 0.92))
+function draw (src, w, h, paint, type = 'image/png') {
   const c = document.createElement('canvas')
   c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h))
   const g = c.getContext('2d')
   if (paint) paint(g, c.width, c.height)
   else g.drawImage(src, 0, 0, c.width, c.height)
-  return canvasPng(c)
+  return canvasBytes(c, type)
 }
 // An SVG's fallback picture, sharp at twice `side`: the longest side it is shown at, in points
 async function svgPng (bytes, side = 600) {
@@ -94,13 +94,16 @@ async function svgPng (bytes, side = 600) {
 }
 // WebP, AVIF and other pictures PowerPoint can't read, converted once a session (the entry goes with the media's bytes)
 const converted = new WeakMap()
-// A frame of a video (and its length) for the poster PowerPoint shows before playback
-function probeMedia (bytes, mime, video) {
-  return new Promise(resolve => {
-    const url = URL.createObjectURL(new Blob([bytes], { type: mime }))
+// A frame of a video (and its length) for the poster PowerPoint shows before playback, about twice the size the video is
+// shown at (`side`, in points). Read through the media's own URL, kept for the session (the entry goes with the media's bytes)
+const probes = new WeakMap()
+function probeMedia (m, video, side = 600) {
+  const hit = probes.get(m.bytes)
+  if (hit && hit.side >= side) return hit.p
+  const p = new Promise(resolve => {
     const v = document.createElement(video ? 'video' : 'audio')
     let done = false
-    const finish = r => { if (done) return; done = true; clearTimeout(timer); v.removeAttribute('src'); v.load?.(); URL.revokeObjectURL(url); resolve(r) }
+    const finish = r => { if (done) return; done = true; clearTimeout(timer); v.removeAttribute('src'); v.load?.(); resolve(r) }
     const timer = setTimeout(() => finish({ ms: 0 }), 8000)
     v.muted = true
     v.preload = 'auto'
@@ -109,12 +112,15 @@ function probeMedia (bytes, mime, video) {
       const ms = Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0
       if (!video) { finish({ ms }); return }
       v.onseeked = async () => {
-        try { finish({ ms, png: v.videoWidth ? await draw(v, v.videoWidth, v.videoHeight) : null }) } catch { finish({ ms }) }
+        const k = Math.min(1, side * 8 / 3 / Math.max(v.videoWidth, v.videoHeight))
+        try { finish({ ms, frame: v.videoWidth ? await draw(v, v.videoWidth * k, v.videoHeight * k, null, 'image/jpeg') : null }) } catch { finish({ ms }) }
       }
       v.currentTime = Math.min(0.5, (v.duration || 1) / 2)
     }
-    v.src = url
+    v.src = m.url
   })
+  probes.set(m.bytes, { side: video ? side : Infinity, p })
+  return p
 }
 async function iconPng (name, color, bg, size = 256) {
   const url = URL.createObjectURL(new Blob([iconSvgMarkup(name, color, 1.6)], { type: 'image/svg+xml' }))
@@ -173,12 +179,12 @@ class MediaStore {
     const video = el.type === 'video'
     if (!this.av.has(el.src)) {
       const ext = AV[String(m.mime || '').toLowerCase()] || (video ? 'mp4' : 'mp3')
-      const probe = await probeMedia(m.bytes, m.mime, video)
-      this.av.set(el.src, { name: this.put(m.bytes, ext, AV_CT[ext], 'media'), mime: m.mime, ms: probe.ms, frame: probe.png })
+      const probe = await probeMedia(m, video, this.size.get(el.src))
+      this.av.set(el.src, { name: this.put(m.bytes, ext, AV_CT[ext], 'media'), mime: m.mime, ms: probe.ms, frame: probe.frame })
     }
     const av = this.av.get(el.src)
     let poster = el.poster ? await this.image(el.poster) : null
-    if (!poster && av.frame) poster = await this.addImage(av.frame, 'image/png')
+    if (!poster && av.frame) poster = await this.addImage(av.frame, 'image/jpeg')
     if (!poster) {
       if (!this.fallback[el.type]) this.fallback[el.type] = await this.addImage(await iconPng(video ? 'film' : 'volume-2', video ? '#FFFFFF' : '#5B6273', video ? '#14161C' : null), 'image/png')
       poster = this.fallback[el.type]
@@ -194,7 +200,7 @@ class MediaStore {
     // how large each picture is shown (sizes the fallback picture of vector art)
     const shown = (id, w, h) => { if (id) this.size.set(id, Math.max(this.size.get(id) || 0, w, h)) }
     for (const e of all) {
-      if (e.type === 'image') shown(e.src, e.w, e.h)
+      if (e.type === 'image' || e.type === 'video') shown(e.src, e.w, e.h)
       if (e.fill?.type === 'image') shown(e.fill.src, e.w, e.h)
       if (e.poster) shown(e.poster, e.w, e.h)
       if (e.type === 'table') for (const row of e.cells || []) for (const c of row || []) if (c?.fill?.type === 'image') shown(c.fill.src, e.w, e.h)
