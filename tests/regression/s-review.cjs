@@ -255,6 +255,20 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     const n = await ev(`__pz.store.slide.value.elements.filter(e => e.type === 'icon').length`), open = await ev(`!!__pz.store.dialog.value`)
     check(n === 1 && !open, `a double-click in Insert icons inserts that one icon (${n})`)
   })
+  await sec('word count', async () => {
+    await fresh()
+    await ev(`(() => { const A = __pz.actions, S = __pz.store
+      const t = A.insertTextBox({ x: 60, y: 60, w: 300, h: 60 }); S.editing.value = null; S.updateEl(t.id, e => { e.html = '<p>one two</p>' })
+      const tb = A.insertTable(2, 2); S.updateEl(tb.id, e => { e.cells[0][0].html = '<p>three four</p>' })
+      const a = A.insertShape('rect', { x: 400, y: 300, w: 80, h: 60 }), b = A.insertShape('ellipse', { x: 520, y: 300, w: 80, h: 60 })
+      S.updateEl(a.id, e => { e.html = '<p>five</p>' }); S.select([a.id, b.id]); A.groupSelected() })()`); await wait(300)
+    await ev(`__pz.store.backstage.value = 'info'`); await wait(400)
+    const info = await ev(`[...document.querySelectorAll('.bs-info tr')].find(r => r.cells[0]?.textContent === 'Words')?.cells[1].textContent`)
+    await ev(`(() => { __pz.store.backstage.value = null; __pz.store.openDialog('wordcount') })()`); await wait(400)
+    const dlg = await ev(`[...document.querySelectorAll('.dlg tr')].find(r => r.cells[0]?.textContent === 'Words on slides')?.cells[1].textContent`)
+    await ev(`__pz.store.closeDialog()`)
+    check(info === '5' && dlg === '5', 'File › Info and Review › Word count count the same words, in tables and groups too (5): ' + JSON.stringify({ info, dlg }))
+  })
   await sec('chart data comma', async () => {
     await fresh()
     const id = await ev(`__pz.actions.insertChart('column').id`)

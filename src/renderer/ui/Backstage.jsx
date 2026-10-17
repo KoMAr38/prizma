@@ -10,6 +10,7 @@ import { Icon } from './Icon.jsx'
 import { Check, Radio, Select, NumField, TextInput, Field } from './controls.jsx'
 import { contextMenu } from './popover.jsx'
 import { ThemeThumb } from './ribbon/design.jsx'
+import { wordCount } from './dialogs.jsx'
 import * as F from '../app/files.js'
 import { runCmd, setUiTheme } from '../app/commands.js'
 import { PrintPages, printOptsDefault } from '../print/PrintPages.jsx'
@@ -170,7 +171,7 @@ function InfoPage () {
   const [stat, setStat] = useState(null)
   useEffect(() => { if (f.path) native.stat(f.path).then(setStat).catch(() => setStat(null)) }, [f.path])
   const setProp = (k, v) => update(dd => { dd.props = { ...(dd.props || {}), [k]: v } }, { coalesce: 'prop:' + k })
-  const words = useMemo(() => d.slides.reduce((a, s) => a + s.elements.reduce((b, e) => b + ((e.html || '').replace(/<[^>]+>/g, ' ').match(/\S+/g) || []).length, 0), 0), [d])
+  const words = useMemo(() => wordCount(d).w, [d])
   return (
     <div class="bs-page">
       <h1>Info</h1>

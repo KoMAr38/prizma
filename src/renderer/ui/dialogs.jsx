@@ -454,8 +454,8 @@ function FontDlg () {
     </Dialog>
   )
 }
-function WordCountDlg () {
-  const d = doc.value
+// Review › Word count and File › Info both count with this
+export function wordCount (d) {
   const words = t => (t.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length
   let w = 0, c = 0, objs = 0, media = 0
   for (const s of d.slides) {
@@ -468,7 +468,11 @@ function WordCountDlg () {
     })
     scan(s.elements)
   }
-  const notes = d.slides.reduce((a, s) => a + words(s.notes || ''), 0)
+  return { w, c, objs, media, notes: d.slides.reduce((a, s) => a + words(s.notes || ''), 0) }
+}
+function WordCountDlg () {
+  const d = doc.value
+  const { w, c, objs, media, notes } = wordCount(d)
   const rows = [['Slides', d.slides.length], ['Hidden slides', d.slides.filter(s => s.hidden).length], ['Words on slides', w], ['Characters (no spaces)', c], ['Words in notes', notes], ['Objects', objs], ['Video and audio clips', media]]
   return (
     <Dialog title="Word count" width={360} onEnter={closeDialog} footer={<Btn2 primary onClick={closeDialog}>Close</Btn2>}>
