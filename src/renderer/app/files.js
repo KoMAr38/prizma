@@ -214,7 +214,9 @@ async function autosaveNow () {
   try {
     // level 1: the copy is written every few minutes while you work, so speed counts more than size
     await saveZip((await lazy.native()).writeNative(d), await native.autosave('file', { id: recoveryId }), 1)
-    await native.autosave('write', { id: recoveryId, meta: { name: file.value.name, path: file.value.path } })
+    // saved while the copy was written: the save already removed the copy, which the write just put back
+    if (!dirty.value) await native.autosave('delete', { id: recoveryId })
+    else await native.autosave('write', { id: recoveryId, meta: { name: file.value.name, path: file.value.path } })
   } catch (e) { console.warn('autosave failed', e) }
 }
 export function startAutosave () {
