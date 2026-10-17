@@ -313,6 +313,7 @@ function picXml (el, c, off) {
     `<p:spPr>${xfrmXml(el, { off })}${geom}${el.line ? lineXml(el.line, c, el.opacity ?? 1) : ''}${effectsXml(el, c)}</p:spPr></p:pic>`
 }
 const LN_TAG = { left: 'lnL', right: 'lnR', top: 'lnT', bottom: 'lnB' }
+const sum = (list, i, n) => list.slice(i, i + n).reduce((a, b) => a + b, 0)
 function tableXml (el, c, off) {
   const id = c.id()
   c.targets.set(el.id, { spid: id, sp: false })
@@ -346,7 +347,9 @@ function tableXml (el, c, off) {
         const t = LN_TAG[side]
         return b && b.width && b.color ? `<a:${t} w="${emuPos(b.width)}">${solidXml(b.color, op, c.theme)}<a:prstDash val="${b.dash && b.dash !== 'solid' ? 'dash' : 'solid'}"/></a:${t}>` : ''
       }).join('')
-      const fill = cell.fill ? fillXml(cell.fill, c, op) : look.fill ? solidXml(look.fill, op, c.theme) : '<a:noFill/>'
+      // a picture fills the whole cell, merged ones included, cropped as the slide shows it
+      const box = { w: sum(cols, k, Math.min(cell.colspan || 1, nC - k)), h: sum(rows, r, Math.min(cell.rowspan || 1, nR - r)) }
+      const fill = cell.fill ? fillXml(cell.fill, c, op, box) : look.fill ? solidXml(look.fill, op, c.theme) : '<a:noFill/>'
       const anchor = cell.vAlign === 'middle' ? 'ctr' : cell.vAlign === 'bottom' ? 'b' : 't'
       return `<a:tc${span}><a:txBody><a:bodyPr/><a:lstStyle/>${parasXml(cv ? '' : cell.html, base, tc)}</a:txBody><a:tcPr marL="${emuPos(ins.l)}" marR="${emuPos(ins.r)}" marT="${emuPos(ins.t)}" marB="${emuPos(ins.b)}" anchor="${anchor}">${lines}${fill}</a:tcPr></a:tc>`
     }).join('')
