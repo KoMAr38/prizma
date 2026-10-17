@@ -203,6 +203,19 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     const b = await paras()
     check(at === '22 pt' && b === 'center|18pt|22pt ; right||22pt', 'Exactly starts at about the text size (18 pt text: ' + at + '): ' + b)
   })
+  await sec('line spacing ticks', async () => {
+    await fresh()
+    await ev(`(() => { const A = __pz.actions, S = __pz.store; const t = A.insertTextBox({ x: 60, y: 60, w: 500, h: 80 }); S.editing.value = null; S.updateEl(t.id, e => { e.html = '<p>one</p>' }); S.select([t.id]); S.ribbonTab.value = 'home' })()`); await wait(300)
+    const ticked = []
+    for (const v of ['1.5', '3.0']) {
+      await page.locator('.ribbon [data-tip="Line spacing"]').click(); await wait(200)
+      await page.locator('.pop .mi', { hasText: new RegExp('^' + v.replace('.', '\\.') + '$') }).click(); await wait(300)
+      await page.locator('.ribbon [data-tip="Line spacing"]').click(); await wait(200)
+      ticked.push(await ev(`[...document.querySelectorAll('.pop .mi')].filter(b => b.querySelector('.mi-ic svg')).map(b => b.textContent).join()`))
+      await page.keyboard.press('Escape'); await wait(100)
+    }
+    check(ticked.join(' ; ') === '1.5 ; 3.0', 'the Line spacing menu ticks the spacing just picked (1.5, 3.0): ' + ticked.join(' ; '))
+  })
   await sec('crop fields', async () => {
     await fresh()
     const id = await insertPhoto()

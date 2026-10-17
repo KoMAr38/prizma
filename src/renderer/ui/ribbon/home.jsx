@@ -70,7 +70,7 @@ export const numberMenu = () => [
   ) }
 ]
 export const lineSpacingMenu = () => [
-  ...[1, 1.15, 1.5, 2, 2.5, 3].map(v => ({ label: v.toFixed(v === 1.15 ? 2 : 1), checked: fmtState.value?.lineH === v * 1.2 || (v === 1 && !fmtState.value?.lineH), run: () => textPara('lineH', v === 1 ? null : Math.round(v * 1.2 * 100) / 100) })),
+  ...[1, 1.15, 1.5, 2, 2.5, 3].map(v => { const lh = Math.round(v * 1.2 * 100) / 100; return { label: v.toFixed(v === 1.15 ? 2 : 1), checked: fmtState.value?.lineH === lh || (v === 1 && !fmtState.value?.lineH), run: () => textPara('lineH', v === 1 ? null : lh) } }),
   { sep: true },
   { label: 'Line spacing options…', run: () => openDialog('paragraph') }
 ]
