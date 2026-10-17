@@ -9,12 +9,22 @@ import { findEl, onSlide, unionBounds, PX } from '../core/model.js'
 export const printJob = signal(null) // { doc, opts } while pages are being printed
 
 const frames = n => new Promise(resolve => { const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step)); step() })
-async function settle (root) {
+// Waits for the fonts and until every picture under root is decoded: photos, video posters, slide and cell backgrounds,
+// picture fills. A picture export taken sooner showed a large background photo as the bare page colour.
+export async function settle (root) {
   await frames(2)
   try { await document.fonts.ready } catch {}
-  const imgs = [...(root || document).querySelectorAll('img')]
-  await Promise.all(imgs.map(im => (im.complete ? null : new Promise(resolve => { im.onload = im.onerror = resolve; setTimeout(resolve, 4000) }))))
+  const pics = new Map() // url -> the <img> showing it, or null
+  for (const n of (root || document).querySelectorAll('*')) {
+    const own = n.localName === 'img' ? n.currentSrc || n.src : n.localName === 'image' ? n.getAttribute('href') : n.localName === 'video' ? n.poster : ''
+    if (own && !pics.has(own)) pics.set(own, n.localName === 'img' ? n : null)
+    for (const m of getComputedStyle(n).backgroundImage.matchAll(/url\("?(.*?)"?\)/g)) if (!pics.has(m[1])) pics.set(m[1], null)
+  }
+  // one at a time: a deck of large photos decoded all at once can take gigabytes
+  for (const [url, img] of pics) await Promise.race([(img || Object.assign(new Image(), { src: url })).decode().catch(() => {}), new Promise(resolve => setTimeout(resolve, 4000))])
   await frames(2)
+  // shortcut: a fixed 60 ms for the compositor to draw what was just decoded; if blank pictures come back, wait for a frame known to be drawn
+  await new Promise(resolve => setTimeout(resolve, 60))
 }
 const sepOf = p => (String(p).includes('\\') ? '\\' : '/')
 const dirOf = p => String(p).replace(/[\\/][^\\/]*$/, '')

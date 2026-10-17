@@ -82,4 +82,34 @@ from PIL import Image
 im = Image.open(sorted(glob.glob(sys.argv[1] + '/gray*.png'))[0]).convert('RGB')
 print(max(max(p) - min(p) for p in im.getdata()))`, OUT]).toString().trim()
   check(+sat <= 6, 'grayscale print has no colour (max channel spread ' + sat + ')')
+
+  // picture export: a large background photo is in every picture. Captured before the photo was decoded, about one
+  // picture in fifty came out as the bare page colour
+  await ev(`(async () => {
+    const S = __pz.store, A = __pz.actions
+    __pz.files.newDocIn('blank'); S.backstage.value = null
+    for (let i = 1; i < 6; i++) A.addSlide('blank')
+    const c = document.createElement('canvas'); c.width = 4000; c.height = 3000
+    const g = c.getContext('2d')
+    g.fillStyle = '#d03030'; g.fillRect(0, 0, 4000, 3000)
+    for (let k = 0; k < 6000; k++) { g.fillStyle = 'rgba(255,255,255,' + Math.random() * 0.15 + ')'; g.fillRect(Math.random() * 4000, Math.random() * 3000, 50, 50) }
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle = '#d0303' + i; g.fillRect(0, 0, 40, 40) // each slide its own photo, so each picture waits for a decode
+      const id = S.addMedia(new Uint8Array(await (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92))).arrayBuffer()), 'image/jpeg')
+      S.update(d => { d.slides[i].elements = []; d.slides[i].bg = { type: 'image', src: id, mode: 'cover' } })
+    }
+  })()`)
+  const blank = []
+  for (let r = 1; r <= 3; r++) {
+    const f = path.join(OUT, `photo-bg${r}.png`)
+    await app.evaluate(({ dialog }, fp) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: fp }) }, f)
+    await ev(`__pz.printing.exportImagesDialog({ fmt: 'png', which: 'all', scale: 1 })`); await idle()
+    const px = JSON.parse(execFileSync('python3', ['-c', `import sys, glob, json
+from PIL import Image
+ims = [Image.open(f).convert('RGB') for f in sorted(glob.glob(sys.argv[1] + '/Slide*.png'))]
+print(json.dumps([im.getpixel((im.width // 2, im.height // 2)) for im in ims]))`, f.replace(/\.png$/, '')]).toString())
+    if (px.length !== 6) blank.push(`round ${r}: ${px.length} pictures`)
+    px.forEach((p, i) => { if (!(p[0] > 150 && p[0] - p[1] > 60)) blank.push(`round ${r} slide ${i + 1}: ${p.join(',')}`) })
+  }
+  check(!blank.length, 'a large background photo is in every exported picture (3 × 6)' + (blank.length ? ': missing in ' + blank.join('; ') : ''))
 }

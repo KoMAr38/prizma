@@ -6,6 +6,7 @@ import { SlideView } from '../render/SlideView.jsx'
 import { PX } from '../core/model.js'
 import { numberingCss } from '../core/html.js'
 import { Icon } from '../ui/Icon.jsx'
+import { settle } from '../print/printing.js'
 
 // Takes the job the editor left on window.opener; its media must be registered before the first slide renders
 const fromOpener = key => {
@@ -221,11 +222,7 @@ export function CaptureApp () {
     if (!it) { job.done({ count: i }); setTimeout(() => window.close(), 50); return }
     let cancel = false
     ;(async () => {
-      await document.fonts.ready
-      const imgs = [...document.querySelectorAll('img')]
-      await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => { im.onload = im.onerror = r })))
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
-      await new Promise(r => setTimeout(r, 60))
+      await settle()
       if (cancel) return
       try {
         let bytes = await native.capture()
