@@ -290,17 +290,22 @@ function effectOf (cls, id, sub, cTn) {
   return null
 }
 // Build animations of a slide. idOf(spid) gives our element id for a PowerPoint shape id.
-// Returns { animations, autoplay: [element ids of media that starts with the slide] }
+// Returns { animations, autoplay: [element ids of media that starts with the slide], loop, muted, hideIdle, fullscreen: [ids] }
 export function readTiming (sld, idOf) {
-  const out = { animations: [], autoplay: [], loop: [] }
+  const out = { animations: [], autoplay: [], loop: [], muted: [], hideIdle: [], fullscreen: [] }
   const timing = kid(sld, 'timing')
   if (!timing) return out
-  // videos and sounds set to play until stopped
+  // videos and sounds: play until stopped, muted, hidden while not playing, full screen (as timingXml writes them)
+  const yes = v => v === '1' || v === 'true'
   for (const m of timing.querySelectorAll('*')) {
-    if (m.localName !== 'cMediaNode' || kid(m, 'cTn')?.getAttribute('repeatCount') !== 'indefinite') continue
+    if (m.localName !== 'cMediaNode') continue
     const tgt = desc(m, 'spTgt')
     const el = tgt ? idOf(tgt.getAttribute('spid')) : null
-    if (el) out.loop.push(el)
+    if (!el) continue
+    if (kid(m, 'cTn')?.getAttribute('repeatCount') === 'indefinite') out.loop.push(el)
+    if (yes(m.getAttribute('mute'))) out.muted.push(el)
+    if (['0', 'false'].includes(m.getAttribute('showWhenStopped'))) out.hideIdle.push(el)
+    if (yes(m.parentElement?.getAttribute('fullScrn'))) out.fullscreen.push(el)
   }
   const main = [...timing.querySelectorAll('*')].find(n => n.localName === 'cTn' && n.getAttribute('nodeType') === 'mainSeq')
   if (!main) return out

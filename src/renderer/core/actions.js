@@ -2,7 +2,7 @@
 import { batch } from '@preact/signals'
 import {
   doc, slide, slideIdx, selection, editing, editCell, slideSel, update, updateSlide, updateEls, select, goSlide,
-  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, painter, settings, appInfo, theme as themeSig
+  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, painter, settings, appInfo, theme as themeSig, redraw
 } from './store.js'
 import {
   uid, findEl, walk, parentGroups, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
@@ -266,7 +266,6 @@ export async function loadPicture (bytes, mime) {
   const shrink = k <= 0.9 && !settings.value.keepPictures && (web || /^image\/(jpeg|png)$/.test(mime))
   if (!web && !shrink) return { bytes, mime, ...sz }
   try {
-    const { redraw } = await import('./store.js')
     return await redraw(bytes, mime, shrink ? Math.round(sz.w * k) : 0, shrink ? Math.round(sz.h * k) : 0, web ? null : mime)
   } catch (e) { console.warn('picture kept as it is', e); return { bytes, mime, ...sz } }
 }

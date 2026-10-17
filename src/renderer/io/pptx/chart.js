@@ -56,6 +56,8 @@ export async function chartPart (el, ctx) {
   const ts = { font: '+minor', size: 12, color: 'dk1', ...(el.ts || {}) }
   const cats = (el.categories || []).map(c => String(c ?? ''))
   const series = (el.series || []).filter(Boolean)
+  // a chart with no categories still shows its values (render/chart.jsx); the file numbers them 1, 2, 3…
+  if (!cats.length) for (let i = 0, m = Math.max(0, ...series.map(s => s.values?.length || 0)); i < m; i++) cats.push(String(i + 1))
   const n = cats.length
   const catRef = `Sheet1!$A$2:$A$${n + 1}`
   const serTx = (s, si) => `<c:tx>${strRef(`Sheet1!$${colName(si + 1)}$1`, [s.name || `Series ${si + 1}`])}</c:tx>`

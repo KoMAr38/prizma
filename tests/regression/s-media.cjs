@@ -57,7 +57,10 @@ module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
   await win.screenshot({ path: path.join(OUT, 'media-show.png') })
   await win.keyboard.down('Escape').catch(() => {}); await wait(800)
 
-  // ---- round trips keep every medium
+  // ---- round trips keep every medium and its playback options (the first video muted, hidden while idle, full screen,
+  // looping; the first sound muted and hidden)
+  await ev(`__pz.store.update(d => { const els = d.slides[1].elements, v = els.find(e => e.type === 'video'), a = els.find(e => e.type === 'audio'); Object.assign(v, { muted: true, hideIdle: true, fullscreen: true, loop: true }); Object.assign(a, { muted: true, hideIdle: true }) })`)
+  const playOpts = `(() => { const els = __pz.store.doc.value.slides[1].elements, v = els.find(e => e.type === 'video'), a = els.find(e => e.type === 'audio'); return [v && [v.muted, v.hideIdle, v.fullscreen, v.loop].map(Boolean).join(), a && [a.muted, a.hideIdle].map(Boolean).join()] })()`
   for (const ext of ['prizma', 'pptx']) {
     const f = path.join(OUT, 'media.' + ext)
     await answerSave(f)
@@ -69,5 +72,8 @@ module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
     const back = await ev(`__pz.store.doc.value.slides.map(s => s.elements.map(e => e.type + (e.src ? ':' + (__pz.store.mediaInfo(e.src)?.bytes?.length > 0 ? 'ok' : 'LOST') : '')).join(','))`)
     console.log(ext, 'reopened', JSON.stringify(back))
     if (JSON.stringify(back).includes('LOST')) errors.push(ext + ': media lost on reopen')
+    const opts = await ev(playOpts)
+    console.log(ext, 'playback options', JSON.stringify(opts))
+    if (JSON.stringify(opts) !== '["true,true,true,true","true,true"]') errors.push(ext + ': playback options lost on reopen')
   }
 }

@@ -21,7 +21,7 @@ export const emu = pt => { const v = Math.round((Number(pt) || 0) * EMU_PER_PT);
 export const emuPos = pt => Math.max(0, emu(pt))
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
 // angle in 60000ths of a degree, normalised to 0..360
-export const ang = deg => Math.round(((((Number(deg) || 0) % 360) + 360) % 360) * 60000) % 21600000
+export const ang = deg => { const d = Number(deg); return Number.isFinite(d) ? Math.round((((d % 360) + 360) % 360) * 60000) % 21600000 : 0 }
 export const pct1 = v => Math.round(clamp(Number(v) || 0, 0, 1) * 100000)
 
 // Prizma's own copy of a document travels inside the .pptx under this namespace (see exportPptx/importPptx)

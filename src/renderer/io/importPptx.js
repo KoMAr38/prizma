@@ -1092,7 +1092,6 @@ export async function importPptx (buffer, onProgress) {
   const twin = await readTwin(zip)
   if (twin) return pinSlideLinks(twin, sanitize)
   const info = await analyse(zip)
-  if (window.__pzDebug) window.__pzAnalysis = info
   onProgress?.('Converting slides')
   // no media from pptxtojson: it throws on linked files and drops m4a/mov/wmv; convertEl reads them from the package
   const json = await pptxParse(buffer, { imageMode: 'none', videoMode: 'none', audioMode: 'none', singleLineSpacingFactor: 1.2 })
@@ -1146,9 +1145,8 @@ export async function importPptx (buffer, onProgress) {
     const ole = (list, o) => list.splice(Math.min(o.at, list.length), 0, { id: uid(), type: 'image', name: o.name, x: o.x, y: o.y, w: o.w, h: o.h, rot: 0, src: media.get(o.ref), crop: null, line: null })
     for (const o of sinfo.oles || []) ole(elements, o)
     for (const o of sinfo.masterOles || []) ole(master, o)
-    const timing = sinfo.sld ? readTiming(sinfo.sld, spid => ids.get(String(spid)) || null) : { animations: [], autoplay: [], loop: [] }
-    for (const id of timing.autoplay) { const el = elements.find(e => e.id === id); if (el) el.autoplay = true }
-    for (const id of timing.loop) { const el = elements.find(e => e.id === id); if (el) el.loop = true }
+    const timing = sinfo.sld ? readTiming(sinfo.sld, spid => ids.get(String(spid)) || null) : { animations: [] }
+    for (const k of ['autoplay', 'loop', 'muted', 'hideIdle', 'fullscreen']) for (const id of timing[k] || []) { const el = elements.find(e => e.id === id); if (el) el[k] = true }
     const layout = layoutOf(sinfo)
     let bg = convFill(s.fill, media)
     if (sinfo.duotone && bg?.type === 'image') {
