@@ -710,12 +710,21 @@ function lineWithRefs (e, sinfo, extra = {}) {
 const isLineShape = t => /^(line|straightConnector1|bentConnector[2-5]|curvedConnector[2-5]|lineInv)$/.test(t || '')
 
 // Custom geometry as one SVG path in the shape's own box, in points. pptxtojson keeps only the first of several
-// sub-paths, which breaks icons and freeform art. Returns null for geometry written with formulas.
+// sub-paths, which breaks icons and freeform art, and writes NaN where a point is a guide (a formula).
+// shortcut: only the guide operators and built-in names decks were seen to use (customGeo.pptx), add others as they turn up
+const GUIDE = { val: x => x, '*/': (x, y, z) => x * y / z, '+-': (x, y, z) => x + y - z, '?:': (x, y, z) => x > 0 ? y : z, abs: Math.abs, min: Math.min, pin: (x, y, z) => y < x ? x : y > z ? z : y, cos: (x, y) => x * Math.cos(y / 60000 * Math.PI / 180) }
+const BAD_PATH = /NaN|Infinity|undefined/
 function custGeomPath (spPr) {
   const list = kids(path(spPr, 'custGeom', 'pathLst'), 'path')
   const ext = path(spPr, 'xfrm', 'ext')
   if (!list.length || !ext) return null
-  const W = +ext.getAttribute('cx') * EMU_PT, H = +ext.getAttribute('cy') * EMU_PT
+  const ew = +ext.getAttribute('cx'), eh = +ext.getAttribute('cy'), W = ew * EMU_PT, H = eh * EMU_PT
+  // guides by name, in EMU, each from the ones before it; an unknown operator makes the path unusable
+  const g = new Map([['w', ew], ['h', eh], ['ss', Math.min(ew, eh)]]), num = a => g.has(a) ? g.get(a) : Number(a)
+  for (const gd of ['avLst', 'gdLst'].flatMap(k => kids(path(spPr, 'custGeom', k), 'gd'))) {
+    const [op, ...a] = (gd.getAttribute('fmla') || '').trim().split(/\s+/)
+    g.set(gd.getAttribute('name'), Object.hasOwn(GUIDE, op) ? GUIDE[op](...a.map(num)) : NaN)
+  }
   const f = v => Math.round(v * 100) / 100
   let d = ''
   for (const p of list) {
@@ -724,7 +733,7 @@ function custGeomPath (spPr) {
     const P = ([x, y]) => `${f(x * sx)} ${f(y * sy)}`
     let cx = 0, cy = 0, x0 = 0, y0 = 0
     for (const c of p.children) {
-      const pts = kids(c, 'pt').map(n => [Number(n.getAttribute('x')), Number(n.getAttribute('y'))])
+      const pts = kids(c, 'pt').map(n => [num(n.getAttribute('x')), num(n.getAttribute('y'))])
       if (pts.some(q => !Number.isFinite(q[0]) || !Number.isFinite(q[1]))) return null
       const end = pts[pts.length - 1]
       switch (c.localName) {
@@ -735,8 +744,8 @@ function custGeomPath (spPr) {
         case 'close': d += 'Z '; cx = x0; cy = y0; break
         case 'arcTo': {
           // angles are visual angles on the ellipse; turn them into parametric ones and draw ≤90° cubic pieces
-          const wR = +c.getAttribute('wR'), hR = +c.getAttribute('hR')
-          const st = +c.getAttribute('stAng') / 60000 * Math.PI / 180, sw = +c.getAttribute('swAng') / 60000 * Math.PI / 180
+          const wR = num(c.getAttribute('wR')), hR = num(c.getAttribute('hR'))
+          const st = num(c.getAttribute('stAng')) / 60000 * Math.PI / 180, sw = num(c.getAttribute('swAng')) / 60000 * Math.PI / 180
           if (![wR, hR, st, sw].every(Number.isFinite)) return null
           if (!wR || !hR || !sw) break
           const par = th => Math.atan2(wR * Math.sin(th), hR * Math.cos(th))
@@ -758,7 +767,7 @@ function custGeomPath (spPr) {
       }
     }
   }
-  return d ? { d: d.trim(), w: W, h: H } : null
+  return d && !BAD_PATH.test(d) ? { d: d.trim(), w: W, h: H } : null
 }
 
 const fallbackFor = name => /mono|consol|courier/i.test(name) ? 'monospace' : /georgia|times|garamond|cambria|constantia|serif|book antiqua|palatino|rockwell|bodoni|sitka|baskerville/i.test(name) && !/sans/i.test(name) ? 'serif' : 'sans-serif'
@@ -906,7 +915,7 @@ function convertEl (e, ctx) {
       // the file's adjustments, where Prizma's own drawing of that preset has the same handle
       const adj = Object.fromEntries(Object.entries(adjFromAvLst(e.shapType, e.keypoints)).filter(([k, v]) => SHAPES[e.shapType]?.adj?.[k] !== undefined && Number.isFinite(v)))
       const el = {
-        ...base, type: 'shape', shape: e.shapType || 'rect', adj, path: g ? g.d : own ? null : e.path || null,
+        ...base, type: 'shape', shape: e.shapType || 'rect', adj, path: g ? g.d : own || BAD_PATH.test(e.path) ? null : e.path || null,
         pathVB: g ? { w: g.w, h: g.h } : own ? null : e.pathViewBox ? { w: e.pathViewBox.width, h: e.pathViewBox.height } : null,
         fill: e.strokeOnly || sinfo?.bgFill || sinfo?.noFill ? null : convFill(e.fill, ctx.media), line: lineWithRefs(e, sinfo), html: fixHtml(e.content, sinfo, fixLinks),
         inset: e.textInset ? { l: e.textInset.l, t: e.textInset.t, r: e.textInset.r, b: e.textInset.b } : { ...DEFAULT_INSET },

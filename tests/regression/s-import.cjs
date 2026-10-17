@@ -45,4 +45,18 @@ module.exports = async ({ page, ev, wait, errors, OUT }) => {
     check(b === 'image/gif | ', 'a VML picture is found by its o:spid: ' + b)
     check(c === ' | image/png', 'an object on the layout shows its picture: ' + c)
   })
+
+  await sec('guide geometry', async () => {
+    // freeforms whose points are guides (formulas): lines, arcs, curves
+    const els = (await open('geometry.pptx')).doc.slides[0].elements
+    const [a, b, c, d] = ['Freeform 4', 'Freeform 8', 'Freeform 9', 'Unknown'].map(n => els.find(e => e.name === n))
+    check(a?.path === 'M0 0 L0 24.45 L150.87 24.45 L150.87 35.87', 'a freeform drawn with guides: ' + a?.path)
+    for (const e of [b, c]) {
+      const nums = (e?.path || '').split(/[^\d.-]+/).filter(Boolean).map(Number)
+      const inBox = nums.length > 8 && nums.every((v, i) => v > -0.5 && v < (i % 2 ? e.pathVB.h : e.pathVB.w) + 0.5)
+      check(inBox && !/[^\d .MLCZ-]/.test(e.path), `${e?.name} is drawn from its guides, inside its box: ${e?.path?.slice(0, 120)}`)
+    }
+    // a guide Prizma can't work out (at2) never leaves a path of NaNs
+    check(d && d.path === null, 'a path with a value that is not a number is not used: ' + d?.path)
+  })
 }
