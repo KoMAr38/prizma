@@ -16,7 +16,8 @@ export const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 export const NS_APR = `xmlns:a="${NS.a}" xmlns:r="${NS.r}" xmlns:p="${NS.p}"`
 
 export const EMU_PER_PT = 12700
-export const emu = pt => Math.round((Number(pt) || 0) * EMU_PER_PT)
+// last line of defence: a broken size never writes NaN, Infinity or a number too large for the file (ST_Coordinate)
+export const emu = pt => { const v = Math.round((Number(pt) || 0) * EMU_PER_PT); return Number.isFinite(v) ? Math.max(-27273042329600, Math.min(27273042316900, v)) : 0 }
 export const emuPos = pt => Math.max(0, emu(pt))
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
 // angle in 60000ths of a degree, normalised to 0..360
