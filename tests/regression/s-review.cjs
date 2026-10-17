@@ -231,6 +231,13 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
   await sec('icons', async () => {
     await fresh()
     await ev(`__pz.store.openDialog('icons')`); await wait(500)
+    const blank = []
+    for (const q of ['', 'x circle', 'usb c']) {
+      await page.locator('.dlg .search-in input').fill(q); await wait(200)
+      blank.push(...await ev(`[...document.querySelectorAll('.dlg .icon-cell svg')].filter(s => !s.children.length).map(s => s.parentNode.dataset.tip)`))
+    }
+    check(!blank.length, 'every icon in Insert icons is drawn (a-arrow-down, x-circle, usb-c-port…): ' + (blank.join(', ') || 'none blank'))
+    await page.locator('.dlg .search-in input').fill(''); await wait(200)
     await page.locator('.dlg .icon-cell').nth(3).dblclick(); await wait(500)
     const n = await ev(`__pz.store.slide.value.elements.filter(e => e.type === 'icon').length`), open = await ev(`!!__pz.store.dialog.value`)
     check(n === 1 && !open, `a double-click in Insert icons inserts that one icon (${n})`)

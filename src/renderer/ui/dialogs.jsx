@@ -149,7 +149,8 @@ function IconsDlg () {
   const [pick, setPick] = useState([])
   const list = useMemo(() => {
     const t = q.trim().toLowerCase().replace(/\s+/g, '-')
-    const all = ICON_NAMES.map(n => n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase())
+    // AArrowDown → a-arrow-down (not aarrow-down), so iconNode turns the name back into the same icon
+    const all = ICON_NAMES.map(n => n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z])([A-Z][a-z])/g, '$1-$2').toLowerCase())
     const uniq = [...new Set(all)]
     return (t ? uniq.filter(n => n.includes(t)) : uniq).slice(0, 360)
   }, [q])
