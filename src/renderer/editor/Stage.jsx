@@ -136,13 +136,13 @@ export function Stage () {
     if (target.closest('video[controls], audio[controls]')) return // media preview controls
     const p = toPt(e)
     const t = tool.value
+    stageRef.current.focus({ preventScroll: true }) // before a right click selects: a field typed in commits on blur, to its own object
     if (e.button === 2) {
       // right click selects what is under the pointer, the menu opens on contextmenu
       const chain = idChain(target, frameRef.current)
       if (chain.length && !chain.some(id => sel.includes(id))) { finishEditing(); select([chain[0]]) }
       return
     }
-    stageRef.current.focus({ preventScroll: true })
     // drawing tools
     if (t) {
       e.preventDefault()
