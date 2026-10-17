@@ -2,8 +2,9 @@
 import * as esbuild from 'esbuild'
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dist = path.join(root, 'dist')
 const watch = process.argv.includes('--watch')
 const dev = process.argv.includes('--dev')
