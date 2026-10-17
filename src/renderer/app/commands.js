@@ -165,8 +165,8 @@ def('slide.moveUp', { label: 'Move slide up', icon: 'arrow-up', run: () => { con
 def('slide.moveDown', { label: 'Move slide down', icon: 'arrow-down', run: () => { const { ids, last } = slideSpan(); if (last < doc.value.slides.length - 1) A.moveSlides(ids, last + 2) } })
 
 // ---------------- objects ----------------
-def('obj.group', { label: 'Group', icon: 'group', keys: 'Ctrl+G', run: () => A.groupSelected(), enabled: () => selection.value.length > 1 })
-def('obj.ungroup', { label: 'Ungroup', icon: 'ungroup', keys: 'Ctrl+Shift+G', run: () => A.ungroupSelected(), enabled: () => selected.value.some(e => e.type === 'group') })
+def('obj.group', { label: 'Group', icon: 'group', keys: 'Ctrl+G', run: () => A.groupSelected(), enabled: () => A.topSelected().length > 1 })
+def('obj.ungroup', { label: 'Ungroup', icon: 'ungroup', keys: 'Ctrl+Shift+G', run: () => A.ungroupSelected(), enabled: () => A.topSelected().some(e => e.type === 'group') })
 def('obj.front', { label: 'Bring to front', icon: 'bring-to-front', keys: 'Ctrl+Shift+]', run: () => A.arrange('front'), enabled: hasSel })
 def('obj.forward', { label: 'Bring forward', icon: 'arrow-up-from-line', run: () => A.arrange('forward'), enabled: hasSel })
 def('obj.back', { label: 'Send to back', icon: 'send-to-back', keys: 'Ctrl+Shift+[', run: () => A.arrange('back'), enabled: hasSel })

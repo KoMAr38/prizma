@@ -9,7 +9,7 @@ import { Btn, Drop, Split, ColorBtn, ColorPicker, Gallery, PickGrid, NumField, u
 import { Menu, closePop } from '../popover.jsx'
 import { Icon } from '../Icon.jsx'
 import { SlideThumb } from '../Thumbs.jsx'
-import { runCmd } from '../../app/commands.js'
+import { runCmd, cmdEnabled } from '../../app/commands.js'
 
 // ---------- shapes ----------
 export const ShapeIcon = memo(function ShapeIcon ({ shape, size = 20 }) {
@@ -185,8 +185,8 @@ export const arrangeMenu = () => [
   { label: 'Bring forward', icon: 'arrow-up-from-line', run: () => runCmd('obj.forward') },
   { label: 'Send backward', icon: 'arrow-down-to-line', run: () => runCmd('obj.backward') },
   { header: 'Group objects' },
-  { label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: selection.value.length < 2, run: () => runCmd('obj.group') },
-  { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !selected.value.some(e => e.type === 'group'), run: () => runCmd('obj.ungroup') },
+  { label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: !cmdEnabled('obj.group'), run: () => runCmd('obj.group') },
+  { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !cmdEnabled('obj.ungroup'), run: () => runCmd('obj.ungroup') },
   { header: 'Position objects' },
   { label: 'Align', icon: 'align-center-vertical', sub: alignMenu() },
   { label: 'Rotate', icon: 'rotate-cw', sub: rotateMenu() },
@@ -248,4 +248,4 @@ export function SizeFields ({ lock }) {
 }
 export const unitStep = () => (settings.value.units || 'cm') === 'in' ? 7.2 : (settings.value.units || 'cm') === 'pt' ? 1 : 72 / 2.54 * 0.1
 export function openFormat (tab) { pane.value = 'format'; if (tab) formatTab.value = tab }
-export { Btn, Drop, Split, ColorBtn, Gallery, PickGrid, Icon, Menu, closePop, runCmd, A }
+export { Btn, Drop, Split, ColorBtn, Gallery, PickGrid, Icon, Menu, closePop, runCmd, cmdEnabled, A }

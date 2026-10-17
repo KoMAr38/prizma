@@ -13,7 +13,7 @@ import { TextEditor, CellEditor } from './TextEditor.jsx'
 import * as A from '../core/actions.js'
 import { contextMenu } from '../ui/popover.jsx'
 import { Icon } from '../ui/Icon.jsx'
-import { mimeOf, runCmd } from '../app/commands.js'
+import { mimeOf, runCmd, cmdEnabled } from '../app/commands.js'
 import { openPath, extOf, OPEN_EXT } from '../app/files.js'
 import { LAYOUTS } from '../core/themes.js'
 import { mediaUrl } from '../core/store.js'
@@ -176,15 +176,15 @@ export function Stage () {
     if (painter.value) { A.applyFormat(id); return }
     const wasSelected = sel.includes(id)
     const el = findEl(s, id)?.el
+    const ids = wasSelected ? sel : e.shiftKey || e.ctrlKey ? A.addToSelection(sel, id) : [id]
     if (e.shiftKey || e.ctrlKey) {
       if (wasSelected && !e.ctrlKey) { select(sel.filter(x => x !== id)); return }
-      if (!wasSelected) select([...sel, id])
+      if (!wasSelected) select(ids)
     } else if (!wasSelected) {
       finishEditing()
       select([id])
     }
     if (editing.value && editing.value !== id) finishEditing()
-    const ids = (e.shiftKey || e.ctrlKey) ? (wasSelected ? sel : [...sel, id]) : (wasSelected ? sel : [id])
     const orig = {}
     for (const x of ids) { const h = findEl(s, x); if (h) orig[x] = { x: h.el.x, y: h.el.y, rot: parentFrame(s, x).rot } }
     const box = unionBounds(ids.map(x => { const h = findEl(s, x); return h ? onSlide(s, h.el) : null }).filter(Boolean))
@@ -596,8 +596,8 @@ export function Stage () {
     }
     items.push(
       { label: 'Group', icon: 'group', sub: [
-        { label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: selection.value.length < 2, run: () => runCmd('obj.group') },
-        { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !selected.value.some(x => x.type === 'group'), run: () => runCmd('obj.ungroup') }] },
+        { label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: !cmdEnabled('obj.group'), run: () => runCmd('obj.group') },
+        { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !cmdEnabled('obj.ungroup'), run: () => runCmd('obj.ungroup') }] },
       { label: 'Bring to front', icon: 'bring-to-front', sub: [{ label: 'Bring to front', icon: 'bring-to-front', run: () => runCmd('obj.front') }, { label: 'Bring forward', icon: 'arrow-up-from-line', run: () => runCmd('obj.forward') }] },
       { label: 'Send to back', icon: 'send-to-back', sub: [{ label: 'Send to back', icon: 'send-to-back', run: () => runCmd('obj.back') }, { label: 'Send backward', icon: 'arrow-down-to-line', run: () => runCmd('obj.backward') }] },
       { sep: true },

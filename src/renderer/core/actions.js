@@ -6,7 +6,7 @@ import {
   selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, tool, pane, formatTab, painter, settings, appInfo, theme as themeSig
 } from './store.js'
 import {
-  uid, findEl, walk, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, hexColor, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
+  uid, findEl, walk, parentGroups, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, hexColor, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
 } from './model.js'
 import { newSlide, layoutPlaceholders, makeDocTheme, themeById, layoutKind, THEMES } from './themes.js'
 import { setRunStyleAll, setParaStyleAll, setBulletsAll, changeLevelAll, normalize, richState, isEmptyHtml, htmlFromText, textOf, replaceText, searchRe } from './html.js'
@@ -296,6 +296,8 @@ export function insertSymbol (ch) {
 }
 
 const isTop = (s, id) => s.elements.some(e => e.id === id)
+// The selected objects that sit on the slide itself: what Group and Ungroup work on
+export const topSelected = () => (slide.value?.elements || []).filter(e => selection.value.includes(e.id))
 // Selected ids reduced to those sharing a container (so group operations stay sane)
 export function topSelection () {
   const s = slide.value
@@ -321,7 +323,12 @@ export function duplicateSelected (offset = 12) {
 }
 export function selectAll () {
   const s = slide.value
-  if (s) select(s.elements.map(e => e.id))
+  if (s) select(s.elements.filter(e => !e.hidden).map(e => e.id))
+}
+// The selection with id added; the groups around it and the objects inside it leave (a drag would move them twice)
+export function addToSelection (sel, id) {
+  const s = slide.value, around = parentGroups(s, id).map(g => g.id)
+  return [...sel.filter(x => !around.includes(x) && !parentGroups(s, x).some(g => g.id === id)), id]
 }
 
 // ---------------- clipboard ----------------
@@ -446,10 +453,9 @@ function pastePayload (payload) {
 
 // ---------------- grouping & arrangement ----------------
 export function groupSelected () {
-  const s = slide.value
-  const ids = selection.value.filter(id => isTop(s, id))
-  if (ids.length < 2) return
-  const els = s.elements.filter(e => ids.includes(e.id))
+  const els = topSelected()
+  if (els.length < 2) return
+  const ids = els.map(e => e.id)
   const b = unionBounds(els)
   const g = { id: uid(), type: 'group', name: 'Group', x: b.x, y: b.y, w: b.w, h: b.h, rot: 0, children: els.map(e => ({ ...JSON.parse(JSON.stringify(e)), x: e.x - b.x, y: e.y - b.y })) }
   updateSlide(sl => {
@@ -461,7 +467,7 @@ export function groupSelected () {
 }
 export function ungroupSelected () {
   const s = slide.value
-  const groups = selection.value.map(id => s.elements.find(e => e.id === id && e.type === 'group')).filter(Boolean)
+  const groups = topSelected().filter(e => e.type === 'group')
   if (!groups.length) return
   const newIds = []
   updateSlide(sl => {

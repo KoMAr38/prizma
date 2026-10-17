@@ -457,7 +457,7 @@ export function SelectionPane () {
         {!rows.length && <div class="pane-empty"><Icon name="layers" size={22} />This slide has no objects.</div>}
         {rows.map(({ e, depth }) => (
           <div key={e.id} class={'sp-row' + (sel.includes(e.id) ? ' cur' : '') + (e.hidden ? ' hid' : '')} style={{ paddingLeft: 10 + depth * 16 + 'px' }}
-            onClick={ev => { const id = e.id; select(ev.ctrlKey || ev.shiftKey ? (sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]) : [id]) }}
+            onClick={ev => { const id = e.id; select(ev.ctrlKey || ev.shiftKey ? (sel.includes(id) ? sel.filter(x => x !== id) : A.addToSelection(sel, id)) : [id]) }}
             onDblClick={() => setRenaming(e.id)}>
             <Icon name={{ text: 'type', shape: 'shapes', line: 'minus', image: 'image', table: 'table', chart: 'chart-column', group: 'group', icon: 'smile', ink: 'pen-tool', video: 'film', audio: 'volume-2' }[e.type] || 'square'} size={14} />
             {renaming === e.id

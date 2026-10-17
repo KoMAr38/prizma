@@ -4,7 +4,7 @@ import { changePicture } from '../../editor/Stage.jsx'
 import { hexColor, solid, round2, recrop, findEl } from '../../core/model.js'
 import { Group, Col, Row, Gallery, PickGrid, NumField, Check, ColorBtn, unitFmt, unitParse, addRecentColor } from '../controls.jsx'
 import {
-  Btn, Drop, Split, Icon, runCmd, A, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker, QuickStylesGallery, FillBtn, OutlineBtn, EffectsBtn,
+  Btn, Drop, Split, Icon, runCmd, cmdEnabled, A, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker, QuickStylesGallery, FillBtn, OutlineBtn, EffectsBtn,
   ArrangeGroup, alignMenu, rotateMenu, SizeFields, openFormat, outlineMenu, closePop, unitStep
 } from './common.jsx'
 import { FontColorBtn } from './home.jsx'
@@ -21,7 +21,7 @@ function ArrangeGroupFull () {
       <Col><ArrangeGroup /><Btn icon="layers" label="Selection pane" onClick={() => runCmd('view.selectionPane')} /></Col>
       <Col>
         <Drop icon="align-center-vertical" label="Align" disabled={dis} menu={alignMenu} />
-        <Drop icon="group" label="Group" disabled={dis} menu={() => [{ label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: selection.value.length < 2, run: () => runCmd('obj.group') }, { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !selected.value.some(e => e.type === 'group'), run: () => runCmd('obj.ungroup') }]} />
+        <Drop icon="group" label="Group" disabled={dis} menu={() => [{ label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: !cmdEnabled('obj.group'), run: () => runCmd('obj.group') }, { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !cmdEnabled('obj.ungroup'), run: () => runCmd('obj.ungroup') }]} />
         <Drop icon="rotate-cw" label="Rotate" disabled={dis} menu={rotateMenu} />
       </Col>
     </Group>
