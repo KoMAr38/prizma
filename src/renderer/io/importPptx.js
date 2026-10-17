@@ -384,28 +384,28 @@ async function readMarker (zip) {
   return m
 }
 // Embedded objects (Excel tables, old charts, other slides…) can't run here; PowerPoint keeps a preview picture of
-// each, either inside the object or, in files converted from PowerPoint 2003, in the slide's VML drawing.
+// each, either in the frame (PowerPoint 2010 and later: in the object's fallback copy) or, in files converted from
+// PowerPoint 2003, in the VML drawing of the slide, layout or master.
 const PIC_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', emf: 'image/x-emf', wmf: 'image/x-wmf', svg: 'image/svg+xml' }
 // video and audio by extension, in the MIME names exportPptx turns back into the same extension
 const AV_MIME = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', avi: 'video/x-msvideo', wmv: 'video/x-ms-wmv', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', wma: 'audio/x-ms-wma', aac: 'audio/aac', ogg: 'audio/ogg' }
-async function olePreview (zip, ole, slideRels) {
-  const blip = ole.getElementsByTagNameNS('*', 'blip')[0]
+async function olePreview (zip, frame, partRels) {
+  const blip = frame.getElementsByTagNameNS('*', 'blip')[0]
   const rid = blip && (blip.getAttributeNS(R_NS, 'embed') || blip.getAttribute('r:embed'))
-  let target = rid ? slideRels[rid]?.target : null
-  const spid = ole.getAttribute('spid')
-  const vml = !target && spid ? Object.values(slideRels).find(r => /\/vmlDrawing$/.test(r.type)) : null
+  let target = rid ? partRels[rid]?.target : null
+  const spid = [...frame.getElementsByTagNameNS('*', 'oleObj')].map(o => o.getAttribute('spid')).find(Boolean)
+  const vml = !target && spid ? Object.values(partRels).find(r => /\/vmlDrawing$/.test(r.type)) : null
   if (vml) {
     const text = await zip.file(vml.target)?.async('string') || ''
     // no regex may scan past a '<' and the closing tag is one indexOf: a crafted drawing can't make them backtrack for minutes
-    const idRe = new RegExp(`\\bid="${spid.replace(/[^\w]/g, '\\$&')}"`)
+    const idRe = new RegExp(`\\b(id|o:spid)="${spid.replace(/[^\w]/g, '\\$&')}"`)
     const open = [...text.matchAll(/<v:shape\b[^<>]*>/g)].find(m => idRe.test(m[0]))
     const end = open ? text.indexOf('</v:shape>', open.index) : -1
     const relid = end > 0 && /<v:imagedata\b[^<>]*\bo:relid="([^"]+)"/.exec(text.slice(open.index + open[0].length, end))
     if (relid) target = (await rels(zip, vml.target))[relid[1]]?.target
   }
-  const f = target && zip.file(target)
-  if (!f) return null
-  return { bytes: await f.async('uint8array'), mime: PIC_MIME[target.split('.').pop().toLowerCase()] || 'image/png' }
+  // the picture loads with the others, once however many slides show the layout's object
+  return target && zip.file(target) ? { ref: target } : null
 }
 // EMF/WMF pictures: Chromium can't draw them, so Windows renders each to PNG at twice the size it is shown
 async function rasterizeMetafiles (slides) {
@@ -486,7 +486,7 @@ async function analyse (zip) {
       hideMasterOnly: off(layEl?.getAttribute('showMasterSp')),
       masterKeys: masTree ? shapeKeys(masTree) : new Set(),
       layoutKeys: lay ? shapeKeys(path(layEl, 'cSld', 'spTree')) : new Set(),
-      shapes: {}, tables: {}, charts: {}, meta: {}, oles: [], fonts: th.fonts, tableStyles: null,
+      shapes: {}, tables: {}, charts: {}, meta: {}, oles: [], masterOles: [], fonts: th.fonts, tableStyles: null,
       layoutName: path(layEl, 'cSld')?.getAttribute('name') || '',
       ownBg: !!path(sldEl, 'cSld', 'bg'),
       duotone: duotoneOf([sldEl, layEl, mas?.xml.documentElement].map(r => path(r, 'cSld', 'bg')).find(Boolean), th, scheme),
@@ -597,15 +597,21 @@ async function analyse (zip) {
     }
     const tree = path(sldEl, 'cSld', 'spTree')
     if (tree) await visit(tree)
-    let at = 0
-    for (const c of tree ? tree.children : []) {
-      if (!DRAWN.has(c.localName)) continue
-      const ole = c.localName === 'graphicFrame' && c.getElementsByTagNameNS('*', 'oleObj')[0]
-      const off = ole && path(c, 'xfrm', 'off'), ext = ole && path(c, 'xfrm', 'ext')
-      const pic = off && ext && await olePreview(zip, ole, sl.rels)
-      if (pic) info.oles.push({ at, name: path(c, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('name') || 'Object', x: off.getAttribute('x') * EMU_PT, y: off.getAttribute('y') * EMU_PT, w: ext.getAttribute('cx') * EMU_PT, h: ext.getAttribute('cy') * EMU_PT, ...pic })
-      at++
+    // embedded objects on the slide, its layout and master, as their preview pictures
+    const oles = async (t, partRels, list) => {
+      let at = 0
+      for (const c of t ? t.children : []) {
+        if (!DRAWN.has(c.localName)) continue
+        const ole = c.localName === 'graphicFrame' && c.getElementsByTagNameNS('*', 'oleObj')[0]
+        const off = ole && path(c, 'xfrm', 'off'), ext = ole && path(c, 'xfrm', 'ext')
+        const pic = off && ext && await olePreview(zip, c, partRels)
+        if (pic) list.push({ at, name: path(c, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('name') || 'Object', x: off.getAttribute('x') * EMU_PT, y: off.getAttribute('y') * EMU_PT, w: ext.getAttribute('cx') * EMU_PT, h: ext.getAttribute('cy') * EMU_PT, ...pic })
+        at++
+      }
     }
+    await oles(tree, sl.rels, info.oles)
+    if (!info.hideAllMaster) await oles(laySpTree, lay?.rels, info.masterOles)
+    if (!info.hideAllMaster && !info.hideMasterOnly) await oles(masTree, mas?.rels, info.masterOles)
     info.masterShapes = {}
     if (laySpTree) await visit(laySpTree, info.masterShapes, true, false)
     if (masTree) await visit(masTree, info.masterShapes, true, false)
@@ -1061,7 +1067,7 @@ export async function importPptx (buffer, onProgress) {
   const parsed = kids((await readXml(zip, '[Content_Types].xml'))?.documentElement, 'Override')
     .filter(o => o.getAttribute('ContentType') === 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml')
     .map(o => o.getAttribute('PartName').slice(1)).sort((a, b) => /(\d+)\.xml/.exec(a)[1] - /(\d+)\.xml/.exec(b)[1])
-  const media = await loadPictures(json.slides, zip)
+  const media = await loadPictures([json.slides, info.slides.map(s => [s.oles, s.masterOles])], zip)
   const pending = []
   const accents = json.themeColors || []
   const tc = info.theme?.colors || {}
@@ -1098,7 +1104,9 @@ export async function importPptx (buffer, onProgress) {
     }
     const mctx = { info: { shapes: sinfo.masterShapes || {}, tables: {} }, keyed: true, media, pending, fixHref, zip }
     let master = byOrder(s.layoutElements).filter(keep).map(e => convert(e, mctx)).filter(Boolean)
-    for (const o of sinfo.oles || []) elements.splice(Math.min(o.at, elements.length), 0, { id: uid(), type: 'image', name: o.name, x: o.x, y: o.y, w: o.w, h: o.h, rot: 0, src: addMedia(o.bytes, o.mime), crop: null, line: null })
+    const ole = (list, o) => list.splice(Math.min(o.at, list.length), 0, { id: uid(), type: 'image', name: o.name, x: o.x, y: o.y, w: o.w, h: o.h, rot: 0, src: media.get(o.ref), crop: null, line: null })
+    for (const o of sinfo.oles || []) ole(elements, o)
+    for (const o of sinfo.masterOles || []) ole(master, o)
     const timing = sinfo.sld ? readTiming(sinfo.sld, spid => ids.get(String(spid)) || null) : { animations: [], autoplay: [], loop: [] }
     for (const id of timing.autoplay) { const el = elements.find(e => e.id === id); if (el) el.autoplay = true }
     for (const id of timing.loop) { const el = elements.find(e => e.id === id); if (el) el.loop = true }

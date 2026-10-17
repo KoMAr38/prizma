@@ -36,4 +36,13 @@ module.exports = async ({ page, ev, wait, errors, OUT }) => {
     const r = await open(p), back = charts(r.doc)
     check(r.res === true && [a, b, c, d].every((x, i) => data(x) === data(back[i])), `a save keeps the data of every chart (${r.res}, ${r.toast || 'no message'}): ` + back.map(data).join(' / '))
   })
+
+  await sec('embedded objects', async () => {
+    await open('ole.pptx')
+    // per slide: the pictures on the slide and on its layout, by type (the VML pictures are GIFs)
+    const [a, b, c] = await ev(`__pz.store.doc.value.slides.map(s => [s.elements, s.master || []].map(l => l.filter(e => e.type === 'image').map(e => __pz.store.mediaInfo(e.src)?.mime).join()).join(' | '))`)
+    check(a === 'image/png | ', 'the picture PowerPoint 2010 keeps in the object comes before the VML one: ' + a)
+    check(b === 'image/gif | ', 'a VML picture is found by its o:spid: ' + b)
+    check(c === ' | image/png', 'an object on the layout shows its picture: ' + c)
+  })
 }
