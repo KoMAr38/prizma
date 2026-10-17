@@ -117,9 +117,9 @@
     },
     "appx": {
       "applicationId": "Prizma",
-      "identityName": "MarkoVeselinovic.Prizma",
-      "publisher": "CN=00000000-0000-0000-0000-000000000000",
-      "publisherDisplayName": "Marko Veselinović",
+      "identityName": "Klarbro.Prizma",
+      "publisher": "CN=ABCD4F51-5874-4743-8D74-A26747A39107",
+      "publisherDisplayName": "Klarbro",
       "displayName": "Prizma",
       "backgroundColor": "transparent",
       "languages": [
