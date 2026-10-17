@@ -423,7 +423,7 @@ function mediaXml (el, c, off) {
   const target = '../media/' + av.name
   const embed = c.rels.add(REL.media, target)
   const link = c.rels.add(el.type === 'audio' ? REL.audio : REL.video, target)
-  c.media.push({ spid: id, kind: el.type, autoplay: !!el.autoplay, loop: !!el.loop, ms: av.ms })
+  c.media.push({ spid: id, kind: el.type, autoplay: !!el.autoplay, loop: !!el.loop, muted: !!el.muted, hideIdle: !!el.hideIdle, fullscreen: !!el.fullscreen, ms: av.ms })
   const file = el.type === 'audio' ? `<a:audioFile r:link="${link}"/>` : `<a:videoFile r:link="${link}"/>`
   return `<p:pic><p:nvPicPr>${cNvPr(el, c, id, '<a:hlinkClick r:id="" action="ppaction://media"/>')}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr>${file}<p:extLst><p:ext uri="{DAA4B4D4-6D71-4841-9C94-3DE9BCB7C2F7}"><p14:media xmlns:p14="${NS.p14}" r:embed="${embed}"/></p:ext></p:extLst></p:nvPr></p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${c.rels.add(REL.image, '../media/' + poster.name)}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(el, { off })}${prstXml('rect', {})}</p:spPr></p:pic>`
