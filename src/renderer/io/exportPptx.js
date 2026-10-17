@@ -298,6 +298,7 @@ function picXml (el, c, off) {
   let fx = ''
   if (op < 0.999) fx += `<a:alphaModFix amt="${pct1(op)}"/>`
   if (f.grayscale) fx += '<a:grayscl/>'
+  if (f.sepia) fx += '<a:duotone><a:prstClr val="black"/><a:srgbClr val="D9C3A5"><a:tint val="50000"/><a:satMod val="180000"/></a:srgbClr></a:duotone>' // PowerPoint's own Sepia recolour
   if (f.brightness || f.contrast) fx += `<a:lum bright="${Math.round((f.brightness || 0) * 1000)}" contrast="${Math.round((f.contrast || 0) * 1000)}"/>`
   if (f.saturate !== undefined && f.saturate !== 100) fx += `<a:hsl hue="0" sat="${Math.round(Math.max(-100, Math.min(100, f.saturate - 100)) * 1000)}" lum="0"/>`
   if (f.blur) fx += `<a:blur rad="${emuPos(f.blur)}"/>`
