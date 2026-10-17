@@ -17,8 +17,24 @@ fs.copyFileSync(path.join(pdfjs, 'build/pdf.worker.min.mjs'), path.join(dist, 'p
 fs.cpSync(path.join(pdfjs, 'cmaps'), path.join(dist, 'pdfjs/cmaps'), { recursive: true })
 fs.cpSync(path.join(pdfjs, 'standard_fonts'), path.join(dist, 'pdfjs/standard_fonts'), { recursive: true })
 
+// pptxtojson throws on one odd object and the whole .pptx fails to open; its own source is bundled with each object read
+// inside a try/catch, as importPptx's convert() does for Prizma's step (a missing anchor fails the build, never silently)
+const pptxSrc = path.join(root, 'node_modules/pptxtojson/src/pptxtojson.js')
+const safePptx = {
+  name: 'safe-pptxtojson',
+  setup (b) {
+    b.onResolve({ filter: /^pptxtojson$/ }, () => ({ path: pptxSrc }))
+    b.onLoad({ filter: /pptxtojson[\\/]src[\\/]pptxtojson\.js$/ }, async a => {
+      const js = await fs.promises.readFile(a.path, 'utf8'), head = 'async function processNodesInSlide('
+      if (js.split(head).length !== 2) throw new Error('pptxtojson changed: processNodesInSlide not found once in ' + a.path)
+      return { contents: js.replace(head, 'async function readNode(') + "\nasync function processNodesInSlide (...a) { try { return await readNode(...a) } catch (e) { console.warn('left out an object pptxtojson could not read', e); return null } }\n", resolveDir: path.dirname(a.path) }
+    })
+  }
+}
+
 const opts = {
   entryPoints: { app: path.join(root, 'src/renderer/main.jsx') },
+  plugins: [safePptx],
   bundle: true,
   outdir: dist,
   format: 'iife',
