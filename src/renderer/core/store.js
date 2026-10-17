@@ -262,7 +262,8 @@ export function updateEls (ids, fn, opts) {
   update(d => {
     const s = d.slides[i]
     for (const id of ids) { const hit = findEl(s, id); if (hit) fn(hit.el, s, d) }
-    for (const id of ids) for (const g of parentGroups(s, id)) refitGroup(g) // a moved child changes its group's box
+    // a changed child changes its group's box, the group's own too when the change was made to the group
+    for (const id of ids) for (const g of [findEl(s, id)?.el, ...parentGroups(s, id)]) if (g?.type === 'group') refitGroup(g)
   }, opts)
 }
 export function setSetting (patch) {

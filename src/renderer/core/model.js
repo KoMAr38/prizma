@@ -267,6 +267,22 @@ export function refitGroup (g) {
   for (const c of g.children) { c.x -= b.x; c.y -= b.y }
   g.x += g.w / 2 + d.x - b.w / 2; g.y += g.h / 2 + d.y - b.h / 2; g.w = b.w; g.h = b.h
 }
+// Removes elements from a slide, at any depth, with the groups they leave empty and their animations; a group that
+// lost a child closes around the rest
+export function removeEls (s, ids) {
+  const kill = list => list.filter(e => {
+    if (ids.includes(e.id)) return false
+    if (!e.children) return true
+    const kept = kill(e.children)
+    if (kept.length < e.children.length) e.children = kept
+    return kept.length > 0
+  })
+  s.elements = kill(s.elements)
+  const refit = list => list.forEach(e => { if (e.type === 'group') { refit(e.children); refitGroup(e) } })
+  refit(s.elements)
+  const all = new Set(); walk(s.elements, e => { all.add(e.id) })
+  s.animations = (s.animations || []).filter(a => all.has(a.el))
+}
 // Links to a slide name the slide (its id), so they follow it when slides move.
 // mapSlideLinks sends every slide link (on objects and inside text) through `to`; no answer drops an object's link.
 // `clean` runs over every piece of text html on the way (file readers pass sanitize).

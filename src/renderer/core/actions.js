@@ -6,7 +6,7 @@ import {
   selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, tool, pane, formatTab, painter, settings, appInfo, theme as themeSig
 } from './store.js'
 import {
-  uid, findEl, walk, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, hexColor, onSlide, parentFrame, rotatePt, refitGroup, mapSlideLinks, cssColor
+  uid, findEl, walk, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, hexColor, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
 } from './model.js'
 import { newSlide, layoutPlaceholders, makeDocTheme, themeById, layoutKind, THEMES } from './themes.js'
 import { setRunStyleAll, setParaStyleAll, setBulletsAll, changeLevelAll, normalize, richState, isEmptyHtml, htmlFromText, textOf, replaceText, searchRe } from './html.js'
@@ -307,17 +307,7 @@ export function topSelection () {
 export function deleteSelected () {
   const ids = selection.value
   if (!ids.length) return
-  update(d => {
-    const s = d.slides[curIdx()]
-    const kill = list => list.filter(e => { if (ids.includes(e.id)) return false; if (e.children) e.children = kill(e.children); return true })
-    s.elements = kill(s.elements)
-    // drop now-empty groups and animations of removed elements; a group that lost a child closes around the rest
-    s.elements = s.elements.filter(e => e.type !== 'group' || e.children.length)
-    const refit = list => list.forEach(e => { if (e.type === 'group' && e.children.length) { refit(e.children); refitGroup(e) } })
-    refit(s.elements)
-    const all = new Set(); walk(s.elements, e => { all.add(e.id) })
-    s.animations = (s.animations || []).filter(a => all.has(a.el))
-  })
+  update(d => { removeEls(d.slides[curIdx()], ids) })
   select([])
 }
 export function duplicateSelected (offset = 12) {
@@ -477,21 +467,12 @@ export function ungroupSelected () {
   updateSlide(sl => {
     for (const g of groups) {
       const i = sl.elements.findIndex(e => e.id === g.id)
-      const kids = g.children.map(c => {
-        const k = JSON.parse(JSON.stringify(c))
-        k.x = g.x + c.x; k.y = g.y + c.y // children are stored in the group's own frame, unscaled
-        if (g.rot) {
-          const gc = { x: g.x + g.w / 2, y: g.y + g.h / 2 }, cc = { x: k.x + k.w / 2, y: k.y + k.h / 2 }
-          const a = g.rot * Math.PI / 180, dx = cc.x - gc.x, dy = cc.y - gc.y
-          k.x = gc.x + dx * Math.cos(a) - dy * Math.sin(a) - k.w / 2
-          k.y = gc.y + dx * Math.sin(a) + dy * Math.cos(a) - k.h / 2
-          k.rot = ((k.rot || 0) + g.rot) % 360
-        }
-        newIds.push(k.id)
-        return k
-      })
+      const kids = g.children.map(c => JSON.parse(JSON.stringify(onSlide(s, c)))) // children are stored in the group's own frame
+      newIds.push(...kids.map(k => k.id))
       sl.elements.splice(i, 1, ...kids)
     }
+    // an animation of a group that is gone would point at nothing
+    sl.animations = (sl.animations || []).filter(a => !groups.some(g => g.id === a.el))
   })
   select(newIds)
 }
