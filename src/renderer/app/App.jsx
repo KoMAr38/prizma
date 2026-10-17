@@ -90,8 +90,8 @@ function canvasKey (e) {
     if (e.altKey && dx) { A.rotateSelected(dx * 15); return true }
     const step = e.ctrlKey || e.metaKey ? 0.5 : NUDGE
     if (e.shiftKey) {
-      // Shift+arrows resize like PowerPoint
-      updateEls(A.topSelection(), el => A.resizeEl(el, Math.max(1, el.w + dx * step), Math.max(1, el.h - dy * step)), { coalesce: 'nudge-size' })
+      // Shift+arrows resize like PowerPoint: only the side the arrow points at (a straight line keeps its 0 height)
+      updateEls(A.topSelection(), el => A.resizeEl(el, dx ? Math.max(1, el.w + dx * step) : el.w, dy ? Math.max(1, el.h - dy * step) : el.h), { coalesce: 'nudge-size' })
     } else {
       const s = slide.value // a child of a turned group still moves the way the arrow points on screen
       updateEls(A.topSelection(), el => { const m = A.localMove(s, el.id, dx * step, dy * step); el.x += m.x; el.y += m.y }, { coalesce: 'nudge' })

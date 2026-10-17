@@ -192,8 +192,8 @@ function SizeEditor ({ el }) {
   return (
     <>
       <Section title="Size">
-        <Field label="Height"><NumField value={el.h} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => set(lock ? { h: v, w: el.w * v / el.h } : { h: v })} /></Field>
-        <Field label="Width"><NumField value={el.w} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => set(lock ? { w: v, h: el.h * v / el.w } : { w: v })} /></Field>
+        <Field label="Height"><NumField value={el.h} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => A.setSize([el.id], 'h', v)} /></Field>
+        <Field label="Width"><NumField value={el.w} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => A.setSize([el.id], 'w', v)} /></Field>
         <Field label="Rotation"><NumField value={el.rot || 0} step={1} min={-360} max={720} width={110} fmt={v => Math.round(v * 10) / 10 + '°'} onChange={v => set({ rot: ((v % 360) + 360) % 360 })} /></Field>
         <Check label="Lock aspect ratio" checked={lock} disabled={el.type === 'image'} onChange={v => A.setProps({ lockAspect: v || undefined }, [el.id])} />
       </Section>

@@ -561,6 +561,18 @@ export function setGeometry (id, g, opts) {
     Object.assign(e, g)
   }, opts)
 }
+// A size typed in the Size boxes. One object keeps its aspect when locked; several scale together, as one undo step.
+// A side of length 0 (a straight line's height) can't be scaled: it takes the typed value.
+export function setSize (ids, k, v) {
+  const s = slide.value, els = ids.map(id => findEl(s, id)?.el).filter(Boolean)
+  if (!els.length || !v) return
+  const o = k === 'w' ? 'h' : 'w', b = els.length === 1 ? els[0] : unionBounds(els)
+  updateEls(els.map(e => e.id), e => {
+    const n = { [k]: els.length === 1 || !b[k] ? v : e[k] * v / b[k] }
+    if (els.length === 1 && (e.lockAspect || e.type === 'image') && e[k] && e[o]) n[o] = e[o] * v / e[k]
+    resizeEl(e, n.w ?? e.w, n.h ?? e.h)
+  })
+}
 // A new size for an element, with its content following: a group's children, a table's columns and rows, and an
 // imported outline (kept rather than swapped for the preset shape). Dragging, the Size boxes and Shift+arrows use it.
 export function resizeEl (e, w, h) {

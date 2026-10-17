@@ -224,21 +224,10 @@ export function ArrangeGroup ({ compact }) {
   )
 }
 // Height / width fields for the selection (Size groups)
-export function SizeFields ({ lock }) {
+export function SizeFields () {
   const els = selected.value
   const b = els.length ? (els.length === 1 ? els[0] : unionBounds(els)) : null
-  const set = (k, v) => {
-    if (!els.length || !v) return
-    if (els.length === 1) {
-      const e = els[0]
-      const patch = { [k]: v }
-      if (lock || e.type === 'image' || e.lockAspect) { if (k === 'w') patch.h = e.h * v / e.w; else patch.w = e.w * v / e.h }
-      A.setGeometry(e.id, patch)
-    } else {
-      const s = v / (k === 'w' ? b.w : b.h)
-      for (const e of els) A.setGeometry(e.id, { [k]: e[k] * s })
-    }
-  }
+  const set = (k, v) => A.setSize(els.map(e => e.id), k, v)
   return (
     <>
       <NumField icon="move-vertical" tip="Shape height" value={b ? b.h : null} disabled={!b} step={unitStep()} fmt={v => unitFmt(v)} parse={s => unitParse(s)} min={1} width={92} onChange={v => set('h', v)} />
