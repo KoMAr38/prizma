@@ -1118,7 +1118,9 @@ export async function importPptx (buffer, onProgress) {
     if (!href) return null
     const m = /(?:^|\/)(slide\d+\.xml)$/.exec(href)
     if (m) { const k = slideNames.indexOf(m[1]); return k >= 0 ? '#slide:' + k : null }
-    return /^(https?:|mailto:|ftp:|file:|#)/i.test(href) ? href : null
+    // web, mail and files (file:, C:\…, \\server\…, a path next to the deck); no other scheme (javascript:, data:…)
+    const t = href.replace(/[\0-\x20\x7f]/g, '')
+    return /^(https?:|mailto:|ftp:|file:|#|[a-z]:[\\/]|\\\\)/i.test(t) || !/^[a-z][a-z\d+.-]*:/i.test(t) ? href : null
   }
   const morph = new Map(), tinted = new Map()
   let slideNumbers = false

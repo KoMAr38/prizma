@@ -93,6 +93,25 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     check(ln('O1') === '["#FF0000",0.75]' && ln('O2') === '["#00B050",2]', 'an outline with a colour and no width is kept: ' + ln('O1') + ' ' + ln('O2'))
   })
 
+  await sec('file links', async () => {
+    // links to files survive import and saving (.pptx and .prizma); javascript:, data: and vbscript: do not
+    const links = () => ev(`(() => {
+      const els = __pz.store.doc.value.slides[0].elements, t = document.createElement('template')
+      t.innerHTML = els.find(e => e.name === 'Links')?.html || ''
+      return [...t.content.querySelectorAll('a')].map(a => a.textContent + '=' + (a.getAttribute('href') || '')).join(' ') + ' | ' + els.find(e => e.name === 'Obj')?.link?.url
+    })()`)
+    const want = 'a=file:///C:/docs/a.pdf b=C:\\docs\\b.pdf c=\\\\server\\share\\c.pdf d=docs/d.pdf web=https://example.com/?a=1&b=2 js= data= vbs= js2= | \\\\server\\share\\c.pdf'
+    await open('links.pptx')
+    const got = [await links()]
+    for (const fmt of ['pptx', 'prizma']) {
+      const p = path.join(OUT, 'links-saved.' + fmt)
+      await ev(`__pz.files.writeTo(${JSON.stringify(p)}, '${fmt}')`)
+      await open(p)
+      got.push(await links())
+    }
+    check(got.every(g => g === want), 'file links are kept, script and data links are not, after saving too:\n      ' + got.join('\n      '))
+  })
+
   await sec('reuse slides media', async () => {
     // the other file's pictures go when the dialog closes, but for those the inserted slides use; nothing else goes
     await open('ole.pptx')
