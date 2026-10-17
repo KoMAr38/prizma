@@ -179,6 +179,29 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     await page.locator('.dlg button.btn-primary', { hasText: 'OK' }).click(); await wait(400)
     const html = (await el(id)).html
     check(/12pt/.test(html) && /30pt/.test(html) && /underline/.test(html), 'the Font dialog changes only what was changed in it; mixed sizes stay: ' + html)
+    await ev(`__pz.store.openDialog('font')`); await wait(400)
+    await page.locator('.dlg label.fld', { hasText: 'Size' }).locator('input').fill('-5'); await page.keyboard.press('Enter'); await wait(100)
+    await page.locator('.dlg button.btn-primary', { hasText: 'OK' }).click(); await wait(400)
+    const t = await toasts(), html2 = (await el(id)).html
+    check(/between 1 and 4000/.test(t) && /12pt/.test(html2) && /30pt/.test(html2), 'a font size of -5 in the Font dialog is refused and the sizes stay: ' + t + ' ' + html2)
+  })
+  await sec('paragraph dialog mixed', async () => {
+    await fresh()
+    const id = await ev(`(() => { const A = __pz.actions, S = __pz.store; const t = A.insertTextBox({ x: 60, y: 60, w: 500, h: 120 }); S.editing.value = null; S.updateEl(t.id, e => { e.html = '<p style="text-align: center; margin-top: 18pt;">one</p><p style="text-align: right;">two</p>' }); S.select([t.id]); return t.id })()`); await wait(300)
+    const paras = () => ev(`(() => { const t = document.createElement('template'); t.innerHTML = __pz.store.slide.value.elements.find(e => e.id === ${JSON.stringify(id)}).html; return [...t.content.children].map(p => [p.style.textAlign, p.style.marginTop, p.style.lineHeight].join('|')).join(' ; ') })()`)
+    const lineSpacing = async label => {
+      await ev(`__pz.store.openDialog('paragraph')`); await wait(400)
+      await page.locator('.dlg label.fld', { hasText: 'Line spacing' }).locator('select').selectOption({ label }); await wait(100)
+      const at = await page.locator('.dlg label.fld', { hasText: /^At/ }).locator('input').inputValue()
+      await page.locator('.dlg button.btn-primary', { hasText: 'OK' }).click(); await wait(400)
+      return at
+    }
+    await lineSpacing('Double')
+    const a = await paras()
+    check(a === 'center|18pt|2.4 ; right||2.4', 'the Paragraph dialog changes only what was changed in it (line spacing); alignment and spacing stay: ' + a)
+    const at = await lineSpacing('Exactly')
+    const b = await paras()
+    check(at === '22 pt' && b === 'center|18pt|22pt ; right||22pt', 'Exactly starts at about the text size (18 pt text: ' + at + '): ' + b)
   })
   await sec('crop fields', async () => {
     await fresh()

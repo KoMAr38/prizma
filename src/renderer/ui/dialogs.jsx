@@ -11,7 +11,7 @@ import { Icon, ICON_NAMES } from './Icon.jsx'
 import { NumField, Check, Radio, Select, Combo, TextInput, Field, unitFmt, unitParse, Swatch } from './controls.jsx'
 import { CHART_TYPES } from '../render/chart.jsx'
 import { activeEditor, applyRun, applyPara, liveState } from '../editor/richEdit.js'
-import { fmtState, fontLabel, setFontFace, textRun, textPara, CMDS, refitSoon } from '../app/commands.js'
+import { fmtState, fontLabel, setFontFace, setFontSize, textRun, textPara, CMDS, refitSoon } from '../app/commands.js'
 import { fontOptions, renderFont } from './ribbon/home.jsx'
 import { SlideThumb } from './Thumbs.jsx'
 import { previewReq } from './ribbon/design.jsx'
@@ -349,7 +349,7 @@ function ParagraphDlg () {
   const firstP = (() => { if (p0) return p0; const h = els[0]?.html; if (!h) return null; const t = document.createElement('template'); t.innerHTML = h; return t.content.querySelector('p') })()
   const ps = firstP?.style || {}
   const num = v => parseFloat(v) || 0
-  const [align, setAlign] = useState(st.align || 'left')
+  const [align, setAlign] = useState(st.align || ps.textAlign || 'left')
   const [before, setBefore] = useState(num(ps.marginLeft) + Math.min(0, num(ps.textIndent)))
   const [special, setSpecial] = useState(num(ps.textIndent) < 0 ? 'hanging' : num(ps.textIndent) > 0 ? 'first' : 'none')
   const [by, setBy] = useState(Math.abs(num(ps.textIndent)))
@@ -358,16 +358,20 @@ function ParagraphDlg () {
   const lh = ps.lineHeight || ''
   const [lsMode, setLsMode] = useState(lh.endsWith('pt') ? 'exact' : !lh ? 'single' : Math.abs(parseFloat(lh) - 1.8) < 0.01 ? '1.5' : Math.abs(parseFloat(lh) - 2.4) < 0.01 ? 'double' : 'multiple')
   const [at, setAt] = useState(lh.endsWith('pt') ? parseFloat(lh) : lh ? Math.round(parseFloat(lh) / 1.2 * 100) / 100 : 1)
+  // only what was changed in the dialog is applied, so paragraphs with different alignment or spacing keep theirs
+  const [init] = useState(() => ({ align, before, special, by, sb, sa, lsMode, at }))
   const ok = () => {
     closeDialog()
     const indent = special === 'hanging' ? -by : special === 'first' ? by : 0
     const ml = before + (special === 'hanging' ? by : 0)
     const line = lsMode === 'single' ? null : lsMode === '1.5' ? '1.8' : lsMode === 'double' ? '2.4' : lsMode === 'exact' ? at + 'pt' : String(Math.round(at * 1.2 * 100) / 100)
+    const ind = before !== init.before || special !== init.special || by !== init.by
     const fn = p => {
-      p.style.textAlign = align
-      if (!p.hasAttribute('data-bu') && !p.hasAttribute('data-num')) { if (ml) p.style.marginLeft = ml + 'pt'; else p.style.removeProperty('margin-left'); if (indent) p.style.textIndent = indent + 'pt'; else p.style.removeProperty('text-indent') }
-      p.style.marginTop = sb + 'pt'; p.style.marginBottom = sa + 'pt'
-      if (line) p.style.lineHeight = line; else p.style.removeProperty('line-height')
+      if (align !== init.align) p.style.textAlign = align
+      if (ind && !p.hasAttribute('data-bu') && !p.hasAttribute('data-num')) { if (ml) p.style.marginLeft = ml + 'pt'; else p.style.removeProperty('margin-left'); if (indent) p.style.textIndent = indent + 'pt'; else p.style.removeProperty('text-indent') }
+      if (sb !== init.sb) p.style.marginTop = sb + 'pt'
+      if (sa !== init.sa) p.style.marginBottom = sa + 'pt'
+      if (lsMode !== init.lsMode || at !== init.at) { if (line) p.style.lineHeight = line; else p.style.removeProperty('line-height') }
     }
     if (activeEditor()) { applyPara(fn); return }
     for (const e of els) {
@@ -390,7 +394,7 @@ function ParagraphDlg () {
       <div class="fe-grid">
         <Field label="Before"><NumField value={sb} min={0} step={6} fmt={v => v + ' pt'} width={110} onChange={setSb} /></Field>
         <Field label="After"><NumField value={sa} min={0} step={6} fmt={v => v + ' pt'} width={110} onChange={setSa} /></Field>
-        <Field label="Line spacing"><Select value={lsMode} options={[{ value: 'single', label: 'Single' }, { value: '1.5', label: '1.5 lines' }, { value: 'double', label: 'Double' }, { value: 'exact', label: 'Exactly' }, { value: 'multiple', label: 'Multiple' }]} onChange={setLsMode} /></Field>
+        <Field label="Line spacing"><Select value={lsMode} options={[{ value: 'single', label: 'Single' }, { value: '1.5', label: '1.5 lines' }, { value: 'double', label: 'Double' }, { value: 'exact', label: 'Exactly' }, { value: 'multiple', label: 'Multiple' }]} onChange={m => { setLsMode(m); if ((m === 'exact') !== (lsMode === 'exact')) setAt(m === 'exact' ? Math.round((st.size || 18) * 1.2) : 1) }} /></Field>
         <Field label="At"><NumField value={at} min={0.1} step={lsMode === 'exact' ? 1 : 0.1} fmt={v => lsMode === 'exact' ? v + ' pt' : String(v)} width={110} disabled={!(lsMode === 'exact' || lsMode === 'multiple')} onChange={setAt} /></Field>
       </div>
     </Dialog>
@@ -411,7 +415,7 @@ function FontDlg () {
   const ok = () => {
     closeDialog()
     if (font !== init.font) setFontFace(font === '+major' || font === '+minor' ? fontLabel(font) : font)
-    if (size !== init.size) textRun('size', size)
+    if (size !== init.size) setFontSize(size)
     if (style.includes('b') !== init.style.includes('b')) textRun('bold', style.includes('b'))
     if (style.includes('i') !== init.style.includes('i')) textRun('italic', style.includes('i'))
     if (color !== init.color) textRun('color', color)
