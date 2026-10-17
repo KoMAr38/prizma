@@ -126,7 +126,7 @@ const SMOOTH = { flyIn: ' decel="100000"', floatIn: ' decel="100000"', zoom: ' d
 
 // ---------- timing tree ----------
 // target(elId) → { spid, sp } (sp: a shape with a text body, which PowerPoint lists in the build list)
-// media: [{ spid, kind: 'video' | 'audio', autoplay, loop, ms }]
+// media: [{ spid, kind: 'video' | 'audio', autoplay, loop, muted, hideIdle, fullscreen, ms }]
 export function timingXml (slide, target, media = []) {
   let n = 0
   const id = () => ++n
@@ -195,7 +195,7 @@ export function timingXml (slide, target, media = []) {
       `<p:par><p:cTn id="${eff}" presetID="2" presetClass="mediacall" presetSubtype="0" fill="hold" nodeType="clickEffect"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst><p:cmd type="call" cmd="togglePause"><p:cBhvr><p:cTn id="${cmd}" dur="1" fill="hold"/>${tg}</p:cBhvr></p:cmd></p:childTnLst></p:cTn></p:par>` +
       `</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn><p:nextCondLst><p:cond evt="onClick" delay="0">${tg}</p:cond></p:nextCondLst></p:seq>`
     const tag = m.kind === 'audio' ? 'p:audio' : 'p:video'
-    out += `<${tag}><p:cMediaNode vol="80000"><p:cTn id="${id()}"${m.loop ? ' repeatCount="indefinite"' : ''} fill="hold" display="0"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst></p:cTn>${tg}</p:cMediaNode></${tag}>`
+    out += `<${tag}${m.fullscreen && tag === 'p:video' ? ' fullScrn="1"' : ''}><p:cMediaNode vol="80000"${m.muted ? ' mute="1"' : ''}${m.hideIdle ? ' showWhenStopped="0"' : ''}><p:cTn id="${id()}"${m.loop ? ' repeatCount="indefinite"' : ''} fill="hold" display="0"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst></p:cTn>${tg}</p:cMediaNode></${tag}>`
   }
   const bld = builds.length ? `<p:bldLst>${builds.map(([spid, g]) => `<p:bldP spid="${spid}" grpId="${g}" animBg="1"/>`).join('')}</p:bldLst>` : ''
   return `<p:timing><p:tnLst><p:par><p:cTn id="${root}" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>${out}</p:childTnLst></p:cTn></p:par></p:tnLst>${bld}</p:timing>`

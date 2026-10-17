@@ -23,14 +23,15 @@ export async function startShow (start = 0, opts = {}) {
   const multi = displays.length > 1
   const wantPresenter = !opts.reading && (opts.presenter || (settings.value.presenterView !== false && multi))
   let ended = false
-  window.__prizmaShow = {
+  const job = window.__prizmaShow = {
     doc: d,
     media: [...allMedia().entries()],
     start,
     session,
     rehearse: !!opts.rehearse,
     settings: { ...settings.value, pen: d.show?.pen || '#E5484D', laser: d.show?.laser || '#FF3B30' },
-    onEnd: res => { if (ended) return; ended = true; setTimeout(() => handleEnd(res || {}), 0) }
+    // a window left from an earlier start (a Reading view still open) must not end the show that runs now
+    onEnd: res => { if (ended || window.__prizmaShow !== job) return; ended = true; setTimeout(() => handleEnd(res || {}), 0) }
   }
   showing.value = true
   if (opts.reading) { readWin = window.open('index.html#reading', 'pz-reading'); return }

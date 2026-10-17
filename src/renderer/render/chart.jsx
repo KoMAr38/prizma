@@ -17,7 +17,7 @@ export const CHART_TYPES = [
 ]
 const ACCENTS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6']
 export const seriesColor = (el, i) => el.series[i]?.color || (el.colors && el.colors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
-const catColor = (el, i) => (el.pointColors && el.pointColors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
+export const catColor = (el, i) => (el.pointColors && el.pointColors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
 export const chartLook = el => el.look || '3d'
 // X values of a scatter chart as numbers, or null when some are text (then the points sit at 1, 2, 3…, as in Excel)
 export const xNumbers = cats => { const xs = cats.map(c => Number(String(c ?? '').trim().replace(',', '.'))); return cats.length && cats.every(c => String(c ?? '').trim() !== '') && xs.every(Number.isFinite) ? xs : null }
@@ -211,13 +211,6 @@ export function ChartView ({ el, uidp = 'c-' }) {
           parts.push(<text x={cx + rx * lr * Math.cos(mid)} y={cy + ry * lr * Math.sin(mid) + fs * 0.35} text-anchor="middle" font-size={fs} font-weight="700" style={onColor(catColor(el, sl.i), theme, fs)}>{pct}</text>)
         }
       })
-    }
-    if (holeK && o.center !== false && (o.labels || o.center)) {
-      const big = Math.min(hx * 0.55, fs * 2.4)
-      parts.push(
-        <text x={cx} y={cy + big * 0.25} text-anchor="middle" font-size={big} font-weight="700" fill={textColor}>{o.centerText || fmtNum(vals.reduce((x, y) => x + y, 0))}</text>,
-        <text x={cx} y={cy + big * 0.25 + fs * 1.25} text-anchor="middle" font-size={fs * 0.85} fill={muted}>{o.centerLabel ?? s.name ?? ''}</text>
-      )
     }
     return svg()
   }

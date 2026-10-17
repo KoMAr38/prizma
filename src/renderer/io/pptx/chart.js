@@ -1,15 +1,16 @@
 // Native PowerPoint charts (chart part + embedded workbook) from our chart elements.
 // 3-D pies and columns become real 3-D charts in PowerPoint, with the same colours and soft shadows.
 import JSZip from 'jszip'
-import { esc, colorXml, solidXml, XML_HEAD, NS } from './xml.js'
+import { esc, colorXml, solidXml, effectsXml, XML_HEAD, NS } from './xml.js'
 import { fontXml } from './text.js'
-import { seriesColor, xNumbers } from '../../render/chart.jsx'
+import { seriesColor, catColor, xNumbers } from '../../render/chart.jsx'
 
-const ACCENTS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6']
-const catColor = (el, i) => (el.pointColors && el.pointColors[i]) || (i < 6 ? ACCENTS[i] : ACCENTS[i % 6] + ':' + (i < 12 ? -30 : 40))
 const colName = i => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26) } return s }
 const num = v => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : 0 }
-const SHADOW = '<a:effectLst><a:outerShdw blurRad="63500" dist="25400" dir="5400000" algn="t" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="38000"/></a:srgbClr></a:outerShdw></a:effectLst>'
+// the chart's colours, faded by its transparency (ctx.alpha)
+const fillOf = (c, a, ctx) => solidXml(c, a * (ctx.alpha ?? 1), ctx.theme)
+const colorOf = (c, a, ctx) => colorXml(c, a * (ctx.alpha ?? 1), ctx.theme)
+const shadow = ctx => `<a:effectLst><a:outerShdw blurRad="63500" dist="25400" dir="5400000" algn="t" rotWithShape="0">${colorOf('#000000', 0.38, ctx)}</a:outerShdw></a:effectLst>`
 
 function strRef (ref, values) {
   return `<c:strRef><c:f>${esc(ref)}</c:f><c:strCache><c:ptCount val="${values.length}"/>${values.map((v, i) => `<c:pt idx="${i}"><c:v>${esc(v)}</c:v></c:pt>`).join('')}</c:strCache></c:strRef>`
@@ -19,9 +20,9 @@ function numRef (ref, values) {
 }
 function txPr (ctx, ts, { size, bold, alpha = 1 } = {}) {
   const sz = Math.round((size || ts.size || 12) * 100)
-  return `<c:txPr><a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="${bold ? 1 : 0}">${solidXml(ts.color || 'dk1', alpha, ctx.theme)}${fontXml(ts.font || '+minor')}</a:defRPr></a:pPr><a:endParaRPr lang="${ctx.lang}"/></a:p></c:txPr>`
+  return `<c:txPr><a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="${bold ? 1 : 0}">${fillOf(ts.color || 'dk1', alpha, ctx)}${fontXml(ts.font || '+minor')}</a:defRPr></a:pPr><a:endParaRPr lang="${ctx.lang}"/></a:p></c:txPr>`
 }
-const lineSp = (ctx, ts, alpha, w = 9525) => `<c:spPr><a:noFill/><a:ln w="${w}" cap="flat">${solidXml(ts.color || 'dk1', alpha, ctx.theme)}<a:round/></a:ln></c:spPr>`
+const lineSp = (ctx, ts, alpha, w = 9525) => `<c:spPr><a:noFill/><a:ln w="${w}" cap="flat">${fillOf(ts.color || 'dk1', alpha, ctx)}<a:round/></a:ln></c:spPr>`
 
 function dLbls (kind, o, ctx, ts, { stacked } = {}) {
   if (!o.labels) return `<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>`
@@ -30,7 +31,7 @@ function dLbls (kind, o, ctx, ts, { stacked } = {}) {
   const light = pie && !outside
   const pos = kind === 'bar' ? `<c:dLblPos val="${stacked ? 'ctr' : 'outEnd'}"/>` : (kind === 'pie2d' ? `<c:dLblPos val="${outside ? 'outEnd' : 'ctr'}"/>` : '')
   const tp = light
-    ? `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${Math.round((ts.size || 12) * 100)}" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>${fontXml(ts.font || '+minor')}</a:defRPr></a:pPr><a:endParaRPr lang="${ctx.lang}"/></a:p></c:txPr>`
+    ? `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${Math.round((ts.size || 12) * 100)}" b="1">${fillOf('#FFFFFF', 1, ctx)}${fontXml(ts.font || '+minor')}</a:defRPr></a:pPr><a:endParaRPr lang="${ctx.lang}"/></a:p></c:txPr>`
     : txPr(ctx, ts, { bold: pie })
   return `<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${tp}${pos}<c:showLegendKey val="0"/><c:showVal val="${pie ? 0 : 1}"/><c:showCatName val="${outside ? 1 : 0}"/><c:showSerName val="0"/><c:showPercent val="${pie ? 1 : 0}"/><c:showBubbleSize val="0"/>${outside ? '<c:showLeaderLines val="1"/>' : ''}</c:dLbls>`
 }
@@ -67,7 +68,7 @@ export async function chartPart (el, ctx) {
   let walls = ''
   if (type === 'pie' || type === 'doughnut') {
     const s = series[0] || { name: 'Series 1', values: [] }
-    const dpts = cats.map((_, i) => `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${solidXml(catColor(el, i), 1, ctx.theme)}<a:ln w="12700">${solidXml('lt1', 1, ctx.theme)}</a:ln>${deep ? SHADOW : ''}</c:spPr></c:dPt>`).join('')
+    const dpts = cats.map((_, i) => `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${fillOf(catColor(el, i), 1, ctx)}<a:ln w="12700">${fillOf('lt1', 1, ctx)}</a:ln>${deep ? shadow(ctx) : ''}</c:spPr></c:dPt>`).join('')
     const ser = `<c:ser><c:idx val="0"/><c:order val="0"/>${serTx(s, 0)}${dpts}${dLbls(type === 'pie' && !deep ? 'pie2d' : 'pie', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(0), vals(s))}</c:val></c:ser>`
     if (type === 'doughnut') plot = `<c:doughnutChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/><c:holeSize val="${Math.max(10, Math.min(90, Math.round(o.holeSize || 58)))}"/></c:doughnutChart>`
     else if (deep) {
@@ -76,10 +77,10 @@ export async function chartPart (el, ctx) {
     } else plot = `<c:pieChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/></c:pieChart>`
   } else if (type === 'scatter') {
     const xs = xNumbers(cats) || cats.map((_, i) => i + 1)
-    const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr><a:ln w="28575" cap="rnd"><a:noFill/><a:round/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solidXml(seriesColor(el, si), 1, ctx.theme)}<a:ln w="9525">${solidXml(seriesColor(el, si), 1, ctx.theme)}</a:ln>${deep ? SHADOW : ''}</c:spPr></c:marker>${dLbls('scatter', o, ctx, ts)}<c:xVal>${numRef(catRef, xs)}</c:xVal><c:yVal>${numRef(valRef(si), vals(s))}</c:yVal><c:smooth val="0"/></c:ser>`).join('')
+    const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr><a:ln w="28575" cap="rnd"><a:noFill/><a:round/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${fillOf(seriesColor(el, si), 1, ctx)}<a:ln w="9525">${fillOf(seriesColor(el, si), 1, ctx)}</a:ln>${deep ? shadow(ctx) : ''}</c:spPr></c:marker>${dLbls('scatter', o, ctx, ts)}<c:xVal>${numRef(catRef, xs)}</c:xVal><c:yVal>${numRef(valRef(si), vals(s))}</c:yVal><c:smooth val="0"/></c:ser>`).join('')
     plot = `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>${sers}<c:axId val="500000001"/><c:axId val="500000002"/></c:scatterChart>` + axes(ctx, ts, o, { scatter: true })
   } else if (type === 'radar') {
-    const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr>${solidXml(seriesColor(el, si), 0.22, ctx.theme)}<a:ln w="22225">${solidXml(seriesColor(el, si), 1, ctx.theme)}</a:ln></c:spPr>${dLbls('radar', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val></c:ser>`).join('')
+    const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr>${fillOf(seriesColor(el, si), 0.22, ctx)}<a:ln w="22225">${fillOf(seriesColor(el, si), 1, ctx)}</a:ln></c:spPr>${dLbls('radar', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val></c:ser>`).join('')
     plot = `<c:radarChart><c:radarStyle val="filled"/><c:varyColors val="0"/>${sers}<c:axId val="500000001"/><c:axId val="500000002"/></c:radarChart>` + axes(ctx, ts, o, {})
   } else if (type === 'line' || type === 'area') {
     const g = grouping === 'percent' ? 'percentStacked' : grouping === 'stacked' ? 'stacked' : 'standard'
@@ -95,13 +96,14 @@ export async function chartPart (el, ctx) {
       }
     }
     if (type === 'line') {
-      const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr><a:ln w="31750" cap="rnd">${solidXml(seriesColor(el, si), 1, ctx.theme)}<a:round/></a:ln>${deep ? SHADOW : ''}</c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidXml(seriesColor(el, si), 1, ctx.theme)}<a:ln w="9525">${solidXml('lt1', 1, ctx.theme)}</a:ln></c:spPr></c:marker>${dLbls('line', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val><c:smooth val="1"/></c:ser>`).join('')
+      const smooth = el.smooth ?? deep // the renderer's rule (render/chart.jsx)
+      const sers = series.map((s, si) => `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr><a:ln w="31750" cap="rnd">${fillOf(seriesColor(el, si), 1, ctx)}<a:round/></a:ln>${deep ? shadow(ctx) : ''}</c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${fillOf(seriesColor(el, si), 1, ctx)}<a:ln w="9525">${fillOf('lt1', 1, ctx)}</a:ln></c:spPr></c:marker>${dLbls('line', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val><c:smooth val="${smooth ? 1 : 0}"/></c:ser>`).join('')
       plot = `<c:lineChart><c:grouping val="${g}"/><c:varyColors val="0"/>${sers}<c:marker val="1"/><c:axId val="500000001"/><c:axId val="500000002"/></c:lineChart>` + axes(ctx, ts, o, { valMin })
     } else {
       const sers = series.map((s, si) => {
         const c = seriesColor(el, si)
-        const fill = `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0">${colorXml(c, 0.85, ctx.theme)}</a:gs><a:gs pos="100000">${colorXml(c, 0.12, ctx.theme)}</a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>`
-        return `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr>${fill}<a:ln w="22225">${solidXml(c, 1, ctx.theme)}</a:ln></c:spPr>${dLbls('area', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val></c:ser>`
+        const fill = `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0">${colorOf(c, 0.85, ctx)}</a:gs><a:gs pos="100000">${colorOf(c, 0.12, ctx)}</a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>`
+        return `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr>${fill}<a:ln w="22225">${fillOf(c, 1, ctx)}</a:ln></c:spPr>${dLbls('area', o, ctx, ts)}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val></c:ser>`
       }).join('')
       plot = `<c:areaChart><c:grouping val="${g}"/><c:varyColors val="0"/>${sers}<c:axId val="500000001"/><c:axId val="500000002"/></c:areaChart>` + axes(ctx, ts, o, { valMin })
     }
@@ -112,10 +114,10 @@ export async function chartPart (el, ctx) {
     const sers = series.map((s, si) => {
       const c = seriesColor(el, si)
       const fill = deep
-        ? `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0">${colorXml(c.includes(':') ? c : c + ':14', 1, ctx.theme)}</a:gs><a:gs pos="100000">${colorXml(c, 1, ctx.theme)}</a:gs></a:gsLst><a:lin ang="${horizontal ? 0 : 5400000}" scaled="0"/></a:gradFill>`
-        : solidXml(c, 1, ctx.theme)
+        ? `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0">${colorOf(c.includes(':') ? c : c + ':14', 1, ctx)}</a:gs><a:gs pos="100000">${colorOf(c, 1, ctx)}</a:gs></a:gsLst><a:lin ang="${horizontal ? 0 : 5400000}" scaled="0"/></a:gradFill>`
+        : fillOf(c, 1, ctx)
       // 3-D bars take no label position (Excel can fail on one)
-      return `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr>${fill}<a:ln><a:noFill/></a:ln>${deep ? SHADOW : ''}</c:spPr><c:invertIfNegative val="0"/>${dLbls(deep ? 'bar3d' : 'bar', o, ctx, ts, { stacked })}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val></c:ser>`
+      return `<c:ser><c:idx val="${si}"/><c:order val="${si}"/>${serTx(s, si)}<c:spPr>${fill}<a:ln><a:noFill/></a:ln>${deep ? shadow(ctx) : ''}</c:spPr><c:invertIfNegative val="0"/>${dLbls(deep ? 'bar3d' : 'bar', o, ctx, ts, { stacked })}<c:cat>${strRef(catRef, cats)}</c:cat><c:val>${numRef(valRef(si), vals(s))}</c:val></c:ser>`
     }).join('')
     if (deep) {
       view3D = `<c:view3D><c:rotX val="${horizontal ? 10 : 12}"/><c:rotY val="${horizontal ? 10 : 18}"/><c:depthPercent val="100"/><c:rAngAx val="1"/></c:view3D>`
@@ -127,11 +129,11 @@ export async function chartPart (el, ctx) {
     plot += axes(ctx, ts, o, { bar: true, horizontal, reversed: !!el.reversed })
   }
   const title = o.title
-    ? `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${Math.round((ts.size || 12) * 140)}" b="1">${solidXml(ts.color || 'dk1', 1, ctx.theme)}${fontXml(ts.font || '+minor')}</a:defRPr></a:pPr><a:r><a:rPr lang="${ctx.lang}" sz="${Math.round((ts.size || 12) * 140)}" b="1">${solidXml(ts.color || 'dk1', 1, ctx.theme)}${fontXml(ts.font || '+minor')}</a:rPr><a:t>${esc(o.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>`
+    ? `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${Math.round((ts.size || 12) * 140)}" b="1">${fillOf(ts.color || 'dk1', 1, ctx)}${fontXml(ts.font || '+minor')}</a:defRPr></a:pPr><a:r><a:rPr lang="${ctx.lang}" sz="${Math.round((ts.size || 12) * 140)}" b="1">${fillOf(ts.color || 'dk1', 1, ctx)}${fontXml(ts.font || '+minor')}</a:rPr><a:t>${esc(o.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>`
     : '<c:autoTitleDeleted val="1"/>'
   const legendPos = { bottom: 'b', right: 'r', top: 't', left: 'l' }[o.legend]
   const legend = legendPos ? `<c:legend><c:legendPos val="${legendPos}"/><c:overlay val="0"/>${txPr(ctx, ts, { size: Math.max(8, (ts.size || 12) * 0.9), alpha: 0.85 })}</c:legend>` : ''
-  const xml = `${XML_HEAD}<c:chartSpace xmlns:c="${NS.c}" xmlns:a="${NS.a}" xmlns:r="${NS.r}"><c:date1904 val="0"/><c:lang val="${ctx.lang}"/><c:roundedCorners val="0"/><c:chart>${title}${view3D}${walls}<c:plotArea><c:layout/>${plot}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(ctx, ts)}<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`
+  const xml = `${XML_HEAD}<c:chartSpace xmlns:c="${NS.c}" xmlns:a="${NS.a}" xmlns:r="${NS.r}"><c:date1904 val="0"/><c:lang val="${ctx.lang}"/><c:roundedCorners val="0"/><c:chart>${title}${view3D}${walls}<c:plotArea><c:layout/>${plot}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln>${effectsXml(el, ctx)}</c:spPr>${txPr(ctx, ts)}<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`
   return { xml, xlsx: await workbook(cats, series, type === 'scatter') }
 }
 

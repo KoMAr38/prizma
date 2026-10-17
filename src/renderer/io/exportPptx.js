@@ -6,10 +6,10 @@ import { XML_HEAD, NS, NS_APR, esc, emu, emuPos, solidXml, fillXml, lineXml, eff
 import { parasXml, bodyPrXml, fontXml } from './pptx/text.js'
 import { chartPart } from './pptx/chart.js'
 import { transitionXml, timingXml } from './pptx/anim.js'
-import { mediaInfo, settings, appInfo } from '../core/store.js'
+import { mediaInfo, settings, appInfo, redraw } from '../core/store.js'
 import { imageSize } from '../core/actions.js'
-import { walk, luminance, ELEMENT_LABEL, solid } from '../core/model.js'
-import { SHAPES, shapeParts, pathDriven, linePath } from '../core/shapes.js'
+import { walk, findEl, luminance, ELEMENT_LABEL, solid } from '../core/model.js'
+import { SHAPES, shapeParts, pathDriven, linePath, picShape } from '../core/shapes.js'
 import { LAYOUTS, layoutPlaceholders, themeSpec, slideDecor, PROMPTS } from '../core/themes.js'
 import { tableCellLook } from '../render/tableStyles.js'
 import { iconNode, iconSvgMarkup } from '../ui/Icon.jsx'
@@ -72,38 +72,38 @@ const IMG = { 'image/png': ['png', 'image/png'], 'image/jpeg': ['jpeg', 'image/j
 const AV = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/x-msvideo': 'avi', 'video/x-ms-wmv': 'wmv', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/x-ms-wma': 'wma' }
 const AV_CT = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', avi: 'video/x-msvideo', wmv: 'video/x-ms-wmv', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', wma: 'audio/x-ms-wma' }
 
-const canvasPng = c => new Promise(resolve => c.toBlob(b => b ? b.arrayBuffer().then(a => resolve(new Uint8Array(a))) : resolve(null), 'image/png'))
-function draw (src, w, h, paint) {
+const canvasBytes = (c, type) => new Promise(resolve => c.toBlob(b => b ? b.arrayBuffer().then(a => resolve(new Uint8Array(a))) : resolve(null), type, 0.92))
+function draw (src, w, h, paint, type = 'image/png') {
   const c = document.createElement('canvas')
   c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h))
   const g = c.getContext('2d')
   if (paint) paint(g, c.width, c.height)
   else g.drawImage(src, 0, 0, c.width, c.height)
-  return canvasPng(c)
+  return canvasBytes(c, type)
 }
-// `side`: the longest side the picture is shown at, in points (vector art gets a fallback picture sharp at twice that)
-async function decodeImage (bytes, mime, side = 600) {
-  const blob = new Blob([bytes], { type: mime })
-  if (mime === 'image/svg+xml') {
-    const url = URL.createObjectURL(blob)
-    try {
-      const img = new Image()
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url })
-      const w = img.naturalWidth || 300, h = img.naturalHeight || 150
-      const k = Math.min(2000, Math.max(256, side * 8 / 3)) / Math.max(w, h)
-      return { w, h, png: await draw(img, w * k, h * k) }
-    } finally { URL.revokeObjectURL(url) }
-  }
-  const bmp = await createImageBitmap(blob)
-  return { w: bmp.width, h: bmp.height, bmp }
+// An SVG's fallback picture, sharp at twice `side`: the longest side it is shown at, in points
+async function svgPng (bytes, side = 600) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'image/svg+xml' }))
+  try {
+    const img = new Image()
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url })
+    const w = img.naturalWidth || 300, h = img.naturalHeight || 150
+    const k = Math.min(2000, Math.max(256, side * 8 / 3)) / Math.max(w, h)
+    return { w, h, png: await draw(img, w * k, h * k) }
+  } finally { URL.revokeObjectURL(url) }
 }
-// A frame of a video (and its length) for the poster PowerPoint shows before playback
-function probeMedia (bytes, mime, video) {
-  return new Promise(resolve => {
-    const url = URL.createObjectURL(new Blob([bytes], { type: mime }))
+// WebP, AVIF and other pictures PowerPoint can't read, converted once a session (the entry goes with the media's bytes)
+const converted = new WeakMap()
+// A frame of a video (and its length) for the poster PowerPoint shows before playback, about twice the size the video is
+// shown at (`side`, in points). Read through the media's own URL, kept for the session (the entry goes with the media's bytes)
+const probes = new WeakMap()
+function probeMedia (m, video, side = 600) {
+  const hit = probes.get(m.bytes)
+  if (hit && hit.side >= side) return hit.p
+  const p = new Promise(resolve => {
     const v = document.createElement(video ? 'video' : 'audio')
     let done = false
-    const finish = r => { if (done) return; done = true; clearTimeout(timer); v.removeAttribute('src'); v.load?.(); URL.revokeObjectURL(url); resolve(r) }
+    const finish = r => { if (done) return; done = true; clearTimeout(timer); v.removeAttribute('src'); v.load?.(); resolve(r) }
     const timer = setTimeout(() => finish({ ms: 0 }), 8000)
     v.muted = true
     v.preload = 'auto'
@@ -112,12 +112,15 @@ function probeMedia (bytes, mime, video) {
       const ms = Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0
       if (!video) { finish({ ms }); return }
       v.onseeked = async () => {
-        try { finish({ ms, png: v.videoWidth ? await draw(v, v.videoWidth, v.videoHeight) : null }) } catch { finish({ ms }) }
+        const k = Math.min(1, side * 8 / 3 / Math.max(v.videoWidth, v.videoHeight))
+        try { finish({ ms, frame: v.videoWidth ? await draw(v, v.videoWidth * k, v.videoHeight * k, null, 'image/jpeg') : null }) } catch { finish({ ms }) }
       }
       v.currentTime = Math.min(0.5, (v.duration || 1) / 2)
     }
-    v.src = url
+    v.src = m.url
   })
+  probes.set(m.bytes, { side: video ? side : Infinity, p })
+  return p
 }
 async function iconPng (name, color, bg, size = 256) {
   const url = URL.createObjectURL(new Blob([iconSvgMarkup(name, color, 1.6)], { type: 'image/svg+xml' }))
@@ -144,16 +147,21 @@ class MediaStore {
       const sz = sized ? await imageSize(bytes, mime, url) : null
       return { name: this.put(bytes, known[0], known[1]), mime: known[1], svg: null, w: sz?.w || 0, h: sz?.h || 0 }
     }
-    // SVG keeps its vector original next to a PNG; WebP and other formats become PNG
+    // WebP, AVIF …: a JPEG, or a PNG when see-through (a 5 MB WebP photo became a 32 MB PNG on every save).
+    // A picture nothing can read is left out rather than breaking the file
+    if (mime !== 'image/svg+xml') {
+      if (!converted.has(bytes)) converted.set(bytes, redraw(bytes, mime).catch(() => null))
+      const cv = await converted.get(bytes)
+      return cv && { name: this.put(cv.bytes, IMG[cv.mime][0], cv.mime), mime: cv.mime, svg: null, w: cv.w, h: cv.h }
+    }
+    // SVG keeps its vector original next to a PNG
     try {
-      const dec = await decodeImage(bytes, mime, side)
-      const png = dec.png || await draw(dec.bmp, dec.w, dec.h)
-      dec.bmp?.close?.()
-      if (!png) return null
-      const svg = mime === 'image/svg+xml' ? this.put(bytes, 'svg', 'image/svg+xml') : null
-      return { name: this.put(png, 'png', 'image/png'), mime: 'image/png', svg, w: dec.w, h: dec.h }
+      const dec = await svgPng(bytes, side)
+      if (!dec.png) return null
+      const svg = this.put(bytes, 'svg', 'image/svg+xml')
+      return { name: this.put(dec.png, 'png', 'image/png'), mime: 'image/png', svg, w: dec.w, h: dec.h }
     } catch (e) {
-      return null // a picture nothing can read is left out rather than breaking the file
+      return null
     }
   }
   // sized: the picture fills a shape, a cell or the background
@@ -171,12 +179,12 @@ class MediaStore {
     const video = el.type === 'video'
     if (!this.av.has(el.src)) {
       const ext = AV[String(m.mime || '').toLowerCase()] || (video ? 'mp4' : 'mp3')
-      const probe = await probeMedia(m.bytes, m.mime, video)
-      this.av.set(el.src, { name: this.put(m.bytes, ext, AV_CT[ext], 'media'), mime: m.mime, ms: probe.ms, frame: probe.png })
+      const probe = await probeMedia(m, video, this.size.get(el.src))
+      this.av.set(el.src, { name: this.put(m.bytes, ext, AV_CT[ext], 'media'), mime: m.mime, ms: probe.ms, frame: probe.frame })
     }
     const av = this.av.get(el.src)
     let poster = el.poster ? await this.image(el.poster) : null
-    if (!poster && av.frame) poster = await this.addImage(av.frame, 'image/png')
+    if (!poster && av.frame) poster = await this.addImage(av.frame, 'image/jpeg')
     if (!poster) {
       if (!this.fallback[el.type]) this.fallback[el.type] = await this.addImage(await iconPng(video ? 'film' : 'volume-2', video ? '#FFFFFF' : '#5B6273', video ? '#14161C' : null), 'image/png')
       poster = this.fallback[el.type]
@@ -192,7 +200,7 @@ class MediaStore {
     // how large each picture is shown (sizes the fallback picture of vector art)
     const shown = (id, w, h) => { if (id) this.size.set(id, Math.max(this.size.get(id) || 0, w, h)) }
     for (const e of all) {
-      if (e.type === 'image') shown(e.src, e.w, e.h)
+      if (e.type === 'image' || e.type === 'video') shown(e.src, e.w, e.h)
       if (e.fill?.type === 'image') shown(e.fill.src, e.w, e.h)
       if (e.poster) shown(e.poster, e.w, e.h)
       if (e.type === 'table') for (const row of e.cells || []) for (const c of row || []) if (c?.fill?.type === 'image') shown(c.fill.src, e.w, e.h)
@@ -287,7 +295,6 @@ function cxnXml (el, c, off) {
     : prstXml(k.startsWith('elbow') ? 'bentConnector3' : k.startsWith('curve') ? 'curvedConnector3' : 'line', {})
   return `<p:cxnSp><p:nvCxnSpPr>${cNvPr(el, c, id)}<p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrmXml(el, { off })}${geom}<a:noFill/>${lineXml(el.line, c, el.opacity ?? 1, 'round')}${effectsXml(el, c)}</p:spPr></p:cxnSp>`
 }
-const roundAdj = (r, el) => ({ adj: Math.min(0.5, r / Math.max(1, Math.min(el.w, el.h))) })
 function picXml (el, c, off) {
   const im = c.env.media.img.get(el.src)
   if (!im) return ''
@@ -298,20 +305,19 @@ function picXml (el, c, off) {
   let fx = ''
   if (op < 0.999) fx += `<a:alphaModFix amt="${pct1(op)}"/>`
   if (f.grayscale) fx += '<a:grayscl/>'
+  if (f.sepia) fx += '<a:duotone><a:prstClr val="black"/><a:srgbClr val="D9C3A5"><a:tint val="50000"/><a:satMod val="180000"/></a:srgbClr></a:duotone>' // PowerPoint's own Sepia recolour
   if (f.brightness || f.contrast) fx += `<a:lum bright="${Math.round((f.brightness || 0) * 1000)}" contrast="${Math.round((f.contrast || 0) * 1000)}"/>`
   if (f.saturate !== undefined && f.saturate !== 100) fx += `<a:hsl hue="0" sat="${Math.round(Math.max(-100, Math.min(100, f.saturate - 100)) * 1000)}" lum="0"/>`
   if (f.blur) fx += `<a:blur rad="${emuPos(f.blur)}"/>`
   if (im.svg) fx += `<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${NS.asvg}" r:embed="${c.rels.add(REL.image, '../media/' + im.svg)}"/></a:ext></a:extLst>`
   const cr = el.crop
   const src = cr && (cr.l || cr.t || cr.r || cr.b) ? `<a:srcRect${['l', 't', 'r', 'b'].map(k => cr[k] ? ` ${k}="${Math.round(cr[k] * 100000)}"` : '').join('')}/>` : '<a:srcRect/>'
-  const geom = el.geom && el.geom !== 'rect' && PRESETS.has(el.geom)
-    ? prstXml(el.geom, el.geom === 'roundRect' ? roundAdj(el.radius ?? 12, el) : {})
-    : el.radius ? prstXml('roundRect', roundAdj(el.radius, el)) : prstXml('rect', {})
   return `<p:pic><p:nvPicPr>${cNvPr(el, c, id)}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${c.rels.add(REL.image, '../media/' + im.name)}">${fx}</a:blip>${src}<a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
-    `<p:spPr>${xfrmXml(el, { off })}${geom}${el.line ? lineXml(el.line, c, el.opacity ?? 1) : ''}${effectsXml(el, c)}</p:spPr></p:pic>`
+    `<p:spPr>${xfrmXml(el, { off })}${shapeGeom(picShape(el))}${el.line ? lineXml(el.line, c, el.opacity ?? 1) : ''}${effectsXml(el, c)}</p:spPr></p:pic>`
 }
 const LN_TAG = { left: 'lnL', right: 'lnR', top: 'lnT', bottom: 'lnB' }
+const sum = (list, i, n) => list.slice(i, i + n).reduce((a, b) => a + b, 0)
 function tableXml (el, c, off) {
   const id = c.id()
   c.targets.set(el.id, { spid: id, sp: false })
@@ -319,6 +325,9 @@ function tableXml (el, c, off) {
   const nR = rows.length, nC = cols.length
   const ts = { font: '+minor', size: 14, color: 'dk1', ...(el.ts || {}) }
   const st = { header: true, banded: true, ...(el.style || {}) }
+  // a table has no transparency of its own in PowerPoint: every fill, border and text carries it
+  const op = el.opacity ?? 1
+  const tc = op < 1 ? { ...c, alpha: op } : c
   // cells covered by a merge: PowerPoint marks them hMerge (to the right of the anchor) / vMerge (below)
   const cover = Array.from({ length: nR }, () => Array(nC).fill(null))
   for (let r = 0; r < nR; r++) {
@@ -340,16 +349,18 @@ function tableXml (el, c, off) {
       const lines = ['left', 'right', 'top', 'bottom'].map(side => {
         const b = cell.borders?.[side] || look.borders?.[side]
         const t = LN_TAG[side]
-        return b && b.width && b.color ? `<a:${t} w="${emuPos(b.width)}">${solidXml(b.color, 1, c.theme)}<a:prstDash val="${b.dash && b.dash !== 'solid' ? 'dash' : 'solid'}"/></a:${t}>` : ''
+        return b && b.width && b.color ? `<a:${t} w="${emuPos(b.width)}">${solidXml(b.color, op, c.theme)}<a:prstDash val="${b.dash && b.dash !== 'solid' ? 'dash' : 'solid'}"/></a:${t}>` : ''
       }).join('')
-      const fill = cell.fill ? fillXml(cell.fill, c, 1) : look.fill ? solidXml(look.fill, 1, c.theme) : '<a:noFill/>'
+      // a picture fills the whole cell, merged ones included, cropped as the slide shows it
+      const box = { w: sum(cols, k, Math.min(cell.colspan || 1, nC - k)), h: sum(rows, r, Math.min(cell.rowspan || 1, nR - r)) }
+      const fill = cell.fill ? fillXml(cell.fill, c, op, box) : look.fill ? solidXml(look.fill, op, c.theme) : '<a:noFill/>'
       const anchor = cell.vAlign === 'middle' ? 'ctr' : cell.vAlign === 'bottom' ? 'b' : 't'
-      return `<a:tc${span}><a:txBody><a:bodyPr/><a:lstStyle/>${parasXml(cv ? '' : cell.html, base, c)}</a:txBody><a:tcPr marL="${emuPos(ins.l)}" marR="${emuPos(ins.r)}" marT="${emuPos(ins.t)}" marB="${emuPos(ins.b)}" anchor="${anchor}">${lines}${fill}</a:tcPr></a:tc>`
+      return `<a:tc${span}><a:txBody><a:bodyPr/><a:lstStyle/>${parasXml(cv ? '' : cell.html, base, tc)}</a:txBody><a:tcPr marL="${emuPos(ins.l)}" marR="${emuPos(ins.r)}" marT="${emuPos(ins.t)}" marB="${emuPos(ins.b)}" anchor="${anchor}">${lines}${fill}</a:tcPr></a:tc>`
     }).join('')
     return `<a:tr h="${emuPos(rh)}">${tcs}</a:tr>`
   }).join('')
   // "No Style, No Grid": every colour and border is written on the cells, exactly as Prizma draws them
-  const tbl = `<a:tbl><a:tblPr firstRow="${st.header ? 1 : 0}" bandRow="${st.banded ? 1 : 0}"><a:tableStyleId>{2D5ABB26-0587-4C30-8999-92F81FD0307C}</a:tableStyleId></a:tblPr><a:tblGrid>${cols.map(w => `<a:gridCol w="${emuPos(w)}"/>`).join('')}</a:tblGrid>${trs}</a:tbl>`
+  const tbl = `<a:tbl><a:tblPr firstRow="${st.header ? 1 : 0}" bandRow="${st.banded ? 1 : 0}">${effectsXml(el, c)}<a:tableStyleId>{2D5ABB26-0587-4C30-8999-92F81FD0307C}</a:tableStyleId></a:tblPr><a:tblGrid>${cols.map(w => `<a:gridCol w="${emuPos(w)}"/>`).join('')}</a:tblGrid>${trs}</a:tbl>`
   return `<p:graphicFrame><p:nvGraphicFramePr>${cNvPr(el, c, id)}<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>${xfrmXml(el, { tag: 'p:xfrm', off })}<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">${tbl}</a:graphicData></a:graphic></p:graphicFrame>`
 }
 async function chartXml (el, c, off) {
@@ -357,7 +368,7 @@ async function chartXml (el, c, off) {
   c.targets.set(el.id, { spid: id, sp: false })
   const env = c.env
   const n = ++env.charts
-  const { xml, xlsx } = await chartPart(el, { theme: c.theme, lang: c.lang })
+  const { xml, xlsx } = await chartPart(el, { theme: c.theme, lang: c.lang, alpha: el.opacity ?? 1 })
   const part = `ppt/charts/chart${n}.xml`
   env.pkg.part(part, xml, OX + 'drawingml.chart+xml')
   env.pkg.bin(`ppt/embeddings/Microsoft_Excel_Worksheet${n}.xlsx`, xlsx, OX + 'spreadsheetml.sheet')
@@ -423,7 +434,7 @@ function mediaXml (el, c, off) {
   const target = '../media/' + av.name
   const embed = c.rels.add(REL.media, target)
   const link = c.rels.add(el.type === 'audio' ? REL.audio : REL.video, target)
-  c.media.push({ spid: id, kind: el.type, autoplay: !!el.autoplay, loop: !!el.loop, ms: av.ms })
+  c.media.push({ spid: id, kind: el.type, autoplay: !!el.autoplay, loop: !!el.loop, muted: !!el.muted, hideIdle: !!el.hideIdle, fullscreen: !!el.fullscreen, ms: av.ms })
   const file = el.type === 'audio' ? `<a:audioFile r:link="${link}"/>` : `<a:videoFile r:link="${link}"/>`
   return `<p:pic><p:nvPicPr>${cNvPr(el, c, id, '<a:hlinkClick r:id="" action="ppaction://media"/>')}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr>${file}<p:extLst><p:ext uri="{DAA4B4D4-6D71-4841-9C94-3DE9BCB7C2F7}"><p14:media xmlns:p14="${NS.p14}" r:embed="${embed}"/></p:ext></p:extLst></p:nvPr></p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${c.rels.add(REL.image, '../media/' + poster.name)}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(el, { off })}${prstXml('rect', {})}</p:spPr></p:pic>`
@@ -432,9 +443,11 @@ async function grpXml (el, c, off) {
   const id = c.id()
   c.targets.set(el.id, { spid: id, sp: false })
   let kids = ''
-  for (const ch of el.children || []) kids += await elXml(ch, c, { x: off.x + el.x, y: off.y + el.y })
+  // a group has no transparency of its own in PowerPoint: its children carry it
+  const op = el.opacity ?? 1
+  for (const ch of el.children || []) kids += await elXml(op < 1 ? { ...ch, opacity: (ch.opacity ?? 1) * op } : ch, c, { x: off.x + el.x, y: off.y + el.y })
   if (!kids) { c.targets.delete(el.id); return '' }
-  return `<p:grpSp><p:nvGrpSpPr>${cNvPr(el, c, id)}<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${xfrmXml(el, { off, child: true })}</p:grpSpPr>${kids}</p:grpSp>`
+  return `<p:grpSp><p:nvGrpSpPr>${cNvPr(el, c, id)}<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${xfrmXml(el, { off, child: true })}${effectsXml(el, c)}</p:grpSpPr>${kids}</p:grpSp>`
 }
 async function elXml (el, c, off = { x: 0, y: 0 }) {
   switch (el.type) {
@@ -530,10 +543,10 @@ function themeXml (name, scheme, fonts) {
 const OFFICE = { dk1: '#000000', lt1: '#FFFFFF', dk2: '#44546A', lt2: '#E7E6E6', accent1: '#4472C4', accent2: '#ED7D31', accent3: '#A5A5A5', accent4: '#FFC000', accent5: '#5B9BD5', accent6: '#70AD47', hlink: '#0563C1', folHlink: '#954F72' }
 
 // ---------- masters ----------
+// The nine plain paragraph levels PowerPoint's own files carry (default text, other text, notes)
+const plainLevels = sz => Array.from({ length: 9 }, (_, i) => `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="${sz}" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`).join('')
 function defaultTextStyle (lang) {
-  let lv = ''
-  for (let i = 0; i < 9; i++) lv += `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1800" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`
-  return `<p:defaultTextStyle><a:defPPr><a:defRPr lang="${lang}"/></a:defPPr>${lv}</p:defaultTextStyle>`
+  return `<p:defaultTextStyle><a:defPPr><a:defRPr lang="${lang}"/></a:defPPr>${plainLevels(1800)}</p:defaultTextStyle>`
 }
 function masterXml (env, c, variants, clrMap) {
   const spec = env.spec || themeSpec({ id: 'blank' })
@@ -544,7 +557,7 @@ function masterXml (env, c, variants, clrMap) {
   const hf = hfShape('dt', 2, c, r => dateField(r, today())) + hfShape('ftr', 3, c, () => '') + hfShape('sldNum', 4, c, r => numField(r, '‹#›'))
   const bg = bgXml(env.spec ? spec.bg.content : solid('lt1'), c)
   const ids = variants.map((v, i) => `<p:sldLayoutId id="${2147483649 + i}" r:id="${c.rels.add(REL.layout, `../slideLayouts/slideLayout${v.n}.xml`)}"/>`).join('')
-  const other = `<a:defPPr><a:defRPr lang="${c.lang}"/></a:defPPr>` + Array.from({ length: 9 }, (_, i) => `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1800" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`).join('')
+  const other = `<a:defPPr><a:defRPr lang="${c.lang}"/></a:defPPr>` + plainLevels(1800)
   return `${XML_HEAD}<p:sldMaster ${NS_APR}><p:cSld>${bg}<p:spTree>${GRP}${title}${body}${hf}</p:spTree></p:cSld><p:clrMap ${clrMap} ${ACC}/><p:sldLayoutIdLst>${ids}</p:sldLayoutIdLst>` +
     `<p:txStyles><p:titleStyle>${levelsXml(titleTs, c, false, 9)}</p:titleStyle><p:bodyStyle>${levelsXml(bodyTs, c, true, 9)}</p:bodyStyle><p:otherStyle>${other}</p:otherStyle></p:txStyles></p:sldMaster>`
 }
@@ -604,8 +617,6 @@ function notesMasterXml (env) {
   const W = env.W, H = env.H
   const imgW = 5486400, imgH = Math.round(imgW * H / W), imgY = Math.max(457200, Math.round((4400550 - imgH) / 2) + 228600)
   const ph = (id, name, type, idx, x, y, cx, cy, text = '', extra = '') => `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr><a:spLocks noGrp="1"${type === 'sldImg' ? ' noRot="1" noChangeAspect="1"' : ''}/></p:cNvSpPr><p:nvPr><p:ph type="${type}"${type === 'sldImg' ? '' : ' sz="quarter"'} idx="${idx}"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${extra}</p:spPr>${type === 'sldImg' ? '' : `<p:txBody><a:bodyPr vert="horz" lIns="91440" tIns="45720" rIns="91440" bIns="45720" rtlCol="0"/><a:lstStyle/><a:p>${text}<a:endParaRPr lang="${env.lang}"/></a:p></p:txBody>`}</p:sp>`
-  let lv = ''
-  for (let i = 0; i < 9; i++) lv += `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1200" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl${i + 1}pPr>`
   return `${XML_HEAD}<p:notesMaster ${NS_APR}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${GRP}` +
     ph(2, 'Header Placeholder 1', 'hdr', 0, 0, 0, 2971800, 458788) +
     ph(3, 'Date Placeholder 2', 'dt', 1, 3884613, 0, 2971800, 458788) +
@@ -613,7 +624,7 @@ function notesMasterXml (env) {
     ph(5, 'Notes Placeholder 4', 'body', 3, 685800, 4400550, 5486400, 3600450, `<a:r><a:rPr lang="${env.lang}"/><a:t>Click to edit Master text styles</a:t></a:r>`) +
     ph(6, 'Footer Placeholder 5', 'ftr', 4, 0, 8685213, 2971800, 458787) +
     ph(7, 'Slide Number Placeholder 6', 'sldNum', 5, 3884613, 8685213, 2971800, 458787, `<a:fld id="${guid()}" type="slidenum"><a:rPr lang="${env.lang}"/><a:t>‹#›</a:t></a:fld>`) +
-    `</p:spTree></p:cSld><p:clrMap ${CLRMAP_STD} ${ACC}/><p:notesStyle>${lv}</p:notesStyle></p:notesMaster>`
+    `</p:spTree></p:cSld><p:clrMap ${CLRMAP_STD} ${ACC}/><p:notesStyle>${plainLevels(1200)}</p:notesStyle></p:notesMaster>`
 }
 function notesXml (slide, lang) {
   const paras = String(slide.notes || '').split(/\r?\n/).map(line => `<a:p>${line ? `<a:r><a:rPr lang="${lang}" dirty="0"/><a:t>${esc(line)}</a:t></a:r>` : ''}<a:endParaRPr lang="${lang}" dirty="0"/></a:p>`).join('')
@@ -742,7 +753,7 @@ export async function exportPptx (d, { kind = 'pptx' } = {}) {
         if (!authors.has(name)) authors.set(name, { id: authors.size, last: 0 })
         const a = authors.get(name)
         a.last++
-        const at = cm.el ? walkFind(s.elements, cm.el) : null
+        const at = cm.el ? findEl(s, cm.el)?.el : null
         const x = at ? Math.round((at.x + at.w) * 8) : 80, y = at ? Math.round(at.y * 8) : 80
         // dt has no zone: PowerPoint and our reader take it as local time
         const t = new Date(cm.time || Date.now())
@@ -805,8 +816,3 @@ export async function exportPptx (d, { kind = 'pptx' } = {}) {
   return pkg.zip // written out piece by piece by the caller (files.js)
 }
 const escText = s => s.replace(/[\uFFFE\uFFFF]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-function walkFind (list, id) {
-  let hit = null
-  walk(list, e => { if (e.id === id) { hit = e; return false } })
-  return hit
-}

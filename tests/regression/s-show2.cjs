@@ -78,4 +78,15 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
   const auto = await num(win)
   check(auto >= 3, 'automatic advance reached slide ' + auto + ' after 3.3 s')
   await end(win)
+
+  // a Reading view left open, then a slide show: going back from the Reading view must not end the show
+  await ev(`__pz.store.update(d => { for (const s of d.slides) delete s.advanceAfter }); __pz.store.goSlide(0)`)
+  const w3 = app.waitForEvent('window', { timeout: 15000 })
+  await ev(`__pz.runCmd('view.reading')`)
+  const reading = await w3
+  await reading.waitForLoadState('domcontentloaded'); await reading.waitForTimeout(900)
+  win = await start()
+  await reading.locator('.reading-bar button[data-tip="Back to normal view"]').click(); await wait(1000)
+  check(reading.isClosed() && !win.isClosed(), `back from the Reading view leaves the show running (reading closed ${reading.isClosed()}, show closed ${win.isClosed()})`)
+  await end(win)
 }

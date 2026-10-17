@@ -314,6 +314,12 @@ export function shapeParts (el) {
   if (typeof g === 'string') return [{ d: g, fill: def.strokeOnly ? 'none' : 'norm', evenodd: !!def.evenodd, nonzero: !!def.nonzero }]
   return g.map(p => ({ evenodd: !!def.evenodd, ...p }))
 }
+// A picture's outline as a shape: the preset it is cut to (Edit shape, or the file's), or a rounded rectangle for a corner
+// radius in points. The slide clips the picture to it and the .pptx writes the same geometry.
+export function picShape (el) {
+  const shape = el.geom && el.geom !== 'rect' ? el.geom : el.radius ? 'roundRect' : 'rect'
+  return { shape, w: el.w, h: el.h, adj: shape === 'roundRect' ? { adj: Math.min(0.5, (el.radius ?? 12) / Math.max(1, Math.min(el.w, el.h))) } : {} }
+}
 export function textRect (el) {
   const def = SHAPES[el.shape]
   const t = def?.text

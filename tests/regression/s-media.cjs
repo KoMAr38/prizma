@@ -1,5 +1,5 @@
 // Pictures, video and audio: insert through the real commands, play in the editor and in the show, survive .pptx and .prizma
-const path = require('path'), fs = require('fs')
+const path = require('path'), fs = require('fs'), { execFileSync } = require('child_process')
 const FX = path.join(__dirname, 'fx')
 module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
   const answerOpen = files => app.evaluate(({ dialog }, f) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: f }) }, files)
@@ -58,11 +58,14 @@ module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
   await win.keyboard.down('Escape').catch(() => {}); await wait(800)
 
   // ---- round trips keep every medium
-  for (const ext of ['pptx', 'prizma']) {
+  for (const ext of ['prizma', 'pptx']) {
     const f = path.join(OUT, 'media.' + ext)
     await answerSave(f)
     await ev(`__pz.files.saveAs('${ext}')`); await wait(300); await idle()
-    await ev(`__pz.files.openPath(${JSON.stringify(f)}, { here: true })`); await wait(300); await idle()
+    // a .pptx is reopened from a copy without Prizma's own copy of the deck (customXml), so the PowerPoint XML itself is read
+    const bare = path.join(OUT, 'media-bare.pptx')
+    if (ext === 'pptx') execFileSync('python3', ['-c', `import zipfile,sys\nzi=zipfile.ZipFile(sys.argv[1]);zo=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED)\nfor n in zi.namelist():\n  d=zi.read(n)\n  if n.startswith('customXml/'): continue\n  if n=='ppt/_rels/presentation.xml.rels': d=d.replace(b'Target="../customXml/item1.xml"',b'Target="../customXml/missing.xml"')\n  zo.writestr(n,d)\nzo.close()`, f, bare])
+    await ev(`__pz.files.openPath(${JSON.stringify(ext === 'pptx' ? bare : f)}, { here: true })`); await wait(300); await idle()
     const back = await ev(`__pz.store.doc.value.slides.map(s => s.elements.map(e => e.type + (e.src ? ':' + (__pz.store.mediaInfo(e.src)?.bytes?.length > 0 ? 'ok' : 'LOST') : '')).join(','))`)
     console.log(ext, 'reopened', JSON.stringify(back))
     if (JSON.stringify(back).includes('LOST')) errors.push(ext + ': media lost on reopen')

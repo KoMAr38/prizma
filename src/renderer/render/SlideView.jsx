@@ -1,7 +1,7 @@
 // Renders a slide and its elements. Used by the editor canvas, thumbnails, slide show and printing.
 import { memo } from 'preact/compat'
-import { themeVars, fillCss, cssColor, fontStack, fontWeightOf, DASHES } from '../core/model.js'
-import { shapeParts, textRect, linePath } from '../core/shapes.js'
+import { themeVars, fillCss, cssColor, fontStack, fontWeightOf, DASHES, PX } from '../core/model.js'
+import { shapeParts, textRect, linePath, picShape, scalePath } from '../core/shapes.js'
 import { slideBackground, slideDecor, PROMPTS, layoutKind } from '../core/themes.js'
 import { isEmptyHtml, numberStarts } from '../core/html.js'
 import { mediaUrl, smallUrl, mediaInfo, mediaPlaying } from '../core/store.js'
@@ -199,22 +199,14 @@ function LineSvg ({ el, g, uidp }) {
     </svg>
   )
 }
-const CLIP = {
-  ellipse: 'ellipse(50% 50% at 50% 50%)',
-  roundRect: 'inset(0 round 12%)',
-  triangle: 'polygon(50% 0, 100% 100%, 0 100%)',
-  diamond: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)',
-  hexagon: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)',
-  pentagon: 'polygon(50% 0, 100% 38%, 81% 100%, 19% 100%, 0 38%)',
-  parallelogram: 'polygon(25% 0, 100% 0, 75% 100%, 0 100%)',
-  rtTriangle: 'polygon(0 0, 100% 100%, 0 100%)'
-}
 function ImageEl ({ el, g, uidp, small }) {
   const c = g.crop || { l: 0, t: 0, r: 0, b: 0 } // g is el with the live drag on top, so a crop drag shows its new crop
   const fw = Math.max(0.01, 1 - c.l - c.r), fh = Math.max(0.01, 1 - c.t - c.b)
   const f = el.adjust || {}
   const filter = [f.brightness !== undefined && `brightness(${1 + f.brightness / 100})`, f.contrast !== undefined && `contrast(${1 + f.contrast / 100})`, f.saturate !== undefined && `saturate(${f.saturate / 100})`, f.grayscale && 'grayscale(1)', f.sepia && 'sepia(.85)', f.blur && `blur(${f.blur}pt)`].filter(Boolean).join(' ')
-  const clip = el.geom && el.geom !== 'rect' ? (CLIP[el.geom] || (el.geom === 'roundRect' ? `inset(0 round ${(el.radius ?? 12)}pt)` : undefined)) : (el.radius ? `inset(0 round ${el.radius}pt)` : undefined)
+  // cut to the picture's shape, the same outline the .pptx gets (path() takes CSS pixels)
+  const ps = picShape(g), parts = ps.shape === 'rect' ? null : shapeParts(ps)
+  const clip = parts ? `path(${parts.some(p => p.evenodd) ? 'evenodd, ' : ''}'${scalePath(parts.map(p => p.d).join(' '), PX, PX)}')` : undefined
   // EMF/WMF that Windows couldn't turn into a picture show as missing rather than as a broken image
   // null: the thumbnail's small copy is still being made
   const url = /x-(emf|wmf)$/.test(mediaInfo(el.src)?.mime || '') ? '' : small ? smallUrl(el.src) : mediaUrl(el.src)
@@ -225,7 +217,7 @@ function ImageEl ({ el, g, uidp, small }) {
         ? <img src={url} draggable={false} alt="" style={{ left: (-c.l / fw * 100) + '%', top: (-c.t / fh * 100) + '%', width: (100 / fw) + '%', height: (100 / fh) + '%', filter: filter || undefined }} />
         : url === null ? null : <div class="pz-missing"><Icon name="image-off" size={24} /></div>}
     </div>,
-    el.line && el.line.color && el.line.width ? <ShapeSvg el={{ ...el, shape: el.geom === 'ellipse' ? 'ellipse' : el.geom || 'rect', fill: null, path: null }} g={g} uidp={uidp} /> : null
+    el.line && el.line.color && el.line.width ? <ShapeSvg el={{ ...el, ...ps, fill: null, path: null }} g={g} uidp={uidp} /> : null
   ]
 }
 function TableEl ({ el, editCellNode, mode }) {

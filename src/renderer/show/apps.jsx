@@ -6,6 +6,7 @@ import { SlideView } from '../render/SlideView.jsx'
 import { PX } from '../core/model.js'
 import { numberingCss } from '../core/html.js'
 import { Icon } from '../ui/Icon.jsx'
+import { settle } from '../print/printing.js'
 
 // Takes the job the editor left on window.opener; its media must be registered before the first slide renders
 const fromOpener = key => {
@@ -78,7 +79,8 @@ export function PresenterApp () {
     channel.postMessage({ type: 'cmd', cmd: 'hello' })
     return () => channel.removeEventListener('message', on)
   }, [])
-  useEffect(() => { const iv = setInterval(() => { if (!paused) setElapsed(x => x + 1) }, 1000); return () => clearInterval(iv) }, [paused])
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => { const iv = setInterval(() => { setNow(new Date()); if (!paused) setElapsed(x => x + 1) }, 1000); return () => clearInterval(iv) }, [paused])
   useLayoutEffect(() => {
     const el = boxRef.current
     if (!el) return
@@ -123,14 +125,14 @@ export function PresenterApp () {
           <button onClick={() => setPaused(!paused)} data-tip={paused ? 'Resume timer' : 'Pause timer'}><Icon name={paused ? 'play' : 'pause'} size={15} /></button>
           <button onClick={() => setElapsed(0)} data-tip="Restart timer"><Icon name="rotate-ccw" size={15} /></button>
         </div>
-        <div class="pv-clock">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        <div class="pv-clock">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
         <div class="pv-count">Slide {state.i + 1} of {d.slides.length}</div>
         <button class="btn" onClick={() => cmd('end')}><Icon name="x" size={15} />End slide show</button>
       </header>
       <main class="pv-main">
         <section class="pv-cur">
           <div class="pv-curbox" ref={boxRef}>
-            <Show doc={d} start={ctx.start} master={solo} channel={solo ? showChannel : showChannel} mode={solo ? 'show-solo' : 'presenter-mirror'} fit={box} settings={ctx.settings} toolbar={false} onEnd={solo ? endAll : undefined} />
+            <Show doc={d} start={ctx.start} master={solo} channel={showChannel} mode={solo ? 'show-solo' : 'presenter-mirror'} fit={box} settings={ctx.settings} toolbar={false} onEnd={solo ? endAll : undefined} />
           </div>
           <div class="pv-tools">
             <button onClick={() => cmd('prev')} data-tip="Previous"><Icon name="chevron-left" size={22} /></button>
@@ -221,11 +223,7 @@ export function CaptureApp () {
     if (!it) { job.done({ count: i }); setTimeout(() => window.close(), 50); return }
     let cancel = false
     ;(async () => {
-      await document.fonts.ready
-      const imgs = [...document.querySelectorAll('img')]
-      await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => { im.onload = im.onerror = r })))
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
-      await new Promise(r => setTimeout(r, 60))
+      await settle()
       if (cancel) return
       try {
         let bytes = await native.capture()

@@ -1,6 +1,6 @@
 // Editing features the report did not reach: symbols, header & footer, links, format painter,
 // clipboard, comments and the Selection pane. Real clicks and keys where the user would use them.
-const path = require('path')
+const path = require('path'), { execFileSync } = require('child_process')
 module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
   const check = (ok, msg) => { console.log((ok ? 'ok   ' : 'FAIL ') + msg); if (!ok) errors.push(msg) }
   const idle = () => page.waitForFunction(() => !window.__pz.store.busy.value, null, { timeout: 60000 })
@@ -198,9 +198,14 @@ module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
   const f = path.join(OUT, 'edit.pptx')
   await app.evaluate(({ dialog }, fp) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: fp }) }, f)
   await ev(`__pz.files.saveAs('pptx')`); await wait(300); await idle()
-  const before = await ev(`__pz.store.doc.value.slides.map(s => ({ c: (s.comments || []).map(c => c.author + ':' + c.text).join(','), l: s.elements.map(e => e.link ? JSON.stringify(e.link) : '').join(''), n: s.elements.map(e => e.name || '').join('') }))`)
-  await ev(`__pz.files.openPath(${JSON.stringify(f)}, { here: true })`); await wait(300); await idle()
-  const back = await ev(`__pz.store.doc.value.slides.map(s => ({ c: (s.comments || []).map(c => c.author + ':' + c.text).join(','), l: s.elements.map(e => e.link ? JSON.stringify(e.link) : '').join(''), n: s.elements.map(e => e.name || '').join('') }))`)
+  // a link to a slide is compared by the slide's place: the plain PowerPoint path gives slides new ids
+  const kept = `(d => d.slides.map(s => ({ c: (s.comments || []).map(c => c.author + ':' + c.text).join(','), l: s.elements.map(e => e.link ? JSON.stringify(e.link.slide ? { slide: d.slides.findIndex(x => x.id === e.link.slide) } : e.link) : '').join(''), n: s.elements.map(e => e.name || '').join('') })))(__pz.store.doc.value)`
+  const before = await ev(kept)
+  // reopened from a copy without Prizma's own copy of the deck (customXml), so the PowerPoint XML itself is read
+  const bare = path.join(OUT, 'edit-bare.pptx')
+  execFileSync('python3', ['-c', `import zipfile,sys\nzi=zipfile.ZipFile(sys.argv[1]);zo=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED)\nfor n in zi.namelist():\n  d=zi.read(n)\n  if n.startswith('customXml/'): continue\n  if n=='ppt/_rels/presentation.xml.rels': d=d.replace(b'Target="../customXml/item1.xml"',b'Target="../customXml/missing.xml"')\n  zo.writestr(n,d)\nzo.close()`, f, bare])
+  await ev(`__pz.files.openPath(${JSON.stringify(bare)}, { here: true })`); await wait(300); await idle()
+  const back = await ev(kept)
   check(JSON.stringify(before) === JSON.stringify(back), 'links, comments and names survive .pptx')
   if (JSON.stringify(before) !== JSON.stringify(back)) console.log(JSON.stringify(before), '\n', JSON.stringify(back))
 
