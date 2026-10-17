@@ -1,9 +1,9 @@
 // Task panes on the right: Format (shape/picture/text/background), Animation, Comments, Selection.
 import { useState, useRef } from 'preact/hooks'
 import {
-  doc, slide, selection, selected, pane, formatTab, select, updateEl, updateSlide, settings, appInfo, addMedia, theme as themeSig, editing
+  doc, slide, selection, selected, pane, formatTab, select, updateEl, updateSlide, settings, appInfo, addMedia, theme as themeSig, editing, oneStep
 } from '../core/store.js'
-import { solid, hexColor, DASHES, ARROWS, ELEMENT_LABEL, walk, findEl, onSlide, recrop } from '../core/model.js'
+import { solid, hexColor, DASHES, ARROWS, ELEMENT_LABEL, walk, findEl, onSlide, recrop, uid } from '../core/model.js'
 import { slideBackground } from '../core/themes.js'
 import * as A from '../core/actions.js'
 import { Icon } from './Icon.jsx'
@@ -71,8 +71,8 @@ export function FillEditor ({ fill, onChange, picture = true, pattern = true, no
   const dragStop = (e, i) => {
     e.preventDefault(); e.stopPropagation()
     setStopI(i)
-    const bar = barRef.current
-    const move = ev => { const r = bar.getBoundingClientRect(); const pos = Math.round(Math.max(0, Math.min(100, (ev.clientX - r.left) / r.width * 100))); onChange({ ...fill, stops: fill.stops.map((s, j) => j === i ? { ...s, pos } : s) }) }
+    const bar = barRef.current, key = uid('stop') // one drag is one undo step
+    const move = ev => { const r = bar.getBoundingClientRect(); const pos = Math.round(Math.max(0, Math.min(100, (ev.clientX - r.left) / r.width * 100))); oneStep(() => onChange({ ...fill, stops: fill.stops.map((s, j) => j === i ? { ...s, pos } : s) }), key) }
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
@@ -204,7 +204,7 @@ function SizeEditor ({ el }) {
       </Section>
       {isText && <TextBoxEditor el={el} ins={ins} />}
       <Section title="Alt text" open={false}>
-        <TextInput multiline rows={3} value={el.alt || ''} placeholder="Describe this object for screen readers" onChange={v => A.setProps({ alt: v || undefined }, [el.id])} />
+        <TextInput multiline rows={3} value={el.alt || ''} placeholder="Describe this object for screen readers" onChange={v => A.setProps({ alt: v || undefined }, [el.id], { coalesce: 'alt:' + el.id })} />
       </Section>
     </>
   )
@@ -268,7 +268,7 @@ function TextFillEditor ({ el }) {
   return (
     <>
       <Section title="Text fill">
-        <Field label="Color"><Swatch value={el.ts?.color || 'dk1'} onPick={c => { textRun('color', c); A.setTs({ color: c }) }} /></Field>
+        <Field label="Color"><Swatch value={el.ts?.color || 'dk1'} onPick={c => oneStep(() => { textRun('color', c); A.setTs({ color: c }) })} /></Field>
         <Check label="Gradient fill" checked={!!fx.gradient} onChange={v => setFx({ gradient: v ? ['accent1', 'accent2'] : undefined })} />
         {fx.gradient && <>
           <Field label="From"><Swatch value={fx.gradient[0]} onPick={c => setFx({ gradient: [c, fx.gradient[1]] })} /></Field>

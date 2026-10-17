@@ -1,6 +1,6 @@
 // Building blocks shared by several ribbon tabs.
 import { memo } from 'preact/compat'
-import { doc, slide, selection, selected, tool, pane, formatTab, theme as themeSig, lastColors, settings } from '../../core/store.js'
+import { doc, slide, selection, selected, tool, pane, formatTab, theme as themeSig, lastColors, settings, oneStep } from '../../core/store.js'
 import { SHAPES, SHAPE_CATS, LINE_KINDS, shapeParts } from '../../core/shapes.js'
 import { LAYOUTS, newSlide, slideDecor } from '../../core/themes.js'
 import { hexColor, solid, DASHES, unionBounds, bounds } from '../../core/model.js'
@@ -111,11 +111,13 @@ export function shapeStyles () {
 }
 export function applyShapeStyle (st) {
   const ids = selection.value
-  A.setFill(st.fill, ids)
-  A.setLine(st.line === null ? null : st.line, ids)
-  A.setProps({ shadow: st.shadow || undefined }, ids)
-  A.textRunAll('color', null)
-  A.setTs({ color: st.text })
+  oneStep(() => {
+    A.setFill(st.fill, ids)
+    A.setLine(st.line === null ? null : st.line, ids)
+    A.setProps({ shadow: st.shadow || undefined }, ids)
+    A.textRunAll('color', null)
+    A.setTs({ color: st.text })
+  })
 }
 export function StyleSwatch ({ st }) {
   const t = themeSig.value

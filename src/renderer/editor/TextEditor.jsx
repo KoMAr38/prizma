@@ -123,8 +123,10 @@ export function TextEditor ({ el, rtStyle }) {
       const html = plainNumbers(d.innerHTML)
       const fit = fitPatch(d, cur)
       if (html === last && !fit) return
+      // a fit alone (the box growing to its text, also right after a click with the Text box tool) joins the last step
+      const typed = html !== last
       last = html
-      updateEl(id, e => { e.html = html; if (fit) Object.assign(e, fit) }, { coalesce: 'edit:' + id })
+      updateEl(id, e => { e.html = html; if (fit) Object.assign(e, fit) }, typed ? { coalesce: 'edit:' + id } : { merge: true })
     }
     const commitSoon = raf(commit)
     const api = { el: d, get base () { return elRef.current.ts || {} }, commit: () => { commit(); fmtTick.value++ } }

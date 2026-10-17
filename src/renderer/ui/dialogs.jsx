@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'preact/hooks'
 import {
   dialog, closeDialog, doc, slide, slideIdx, selection, selected, editing, editCell, editorReq, settings, fonts, zoom, fitZoom, native, update, updateEl,
-  select, goSlide, toast, appInfo, theme as themeSig, finishEditing, findState, recentColors, setSetting
+  select, goSlide, toast, appInfo, theme as themeSig, finishEditing, findState, recentColors, setSetting, oneStep
 } from '../core/store.js'
 import { SLIDE_SIZES, hexColor, textBox, findEl } from '../core/model.js'
 import { textOf, FONT_SIZES, searchRe } from '../core/html.js'
@@ -149,7 +149,7 @@ function IconsDlg () {
   const ok = (list = pick) => {
     closeDialog()
     const z = doc.value.size
-    list.forEach((n, i) => { const el = A.insertIcon(n); A.setGeometry(el.id, { x: z.w / 2 - 36 + i * 24 - list.length * 12, y: z.h / 2 - 36 + i * 12 }) })
+    oneStep(() => list.forEach((n, i) => { const el = A.insertIcon(n); A.setGeometry(el.id, { x: z.w / 2 - 36 + i * 24 - list.length * 12, y: z.h / 2 - 36 + i * 12 }) }))
   }
   return (
     <Dialog title="Insert icons" width={720} cls="dlg-icons" onEnter={() => pick.length && ok()} footer={<><span class="fe-note">{pick.length ? `${pick.length} selected` : 'Click icons to select them'}</span><OkCancel ok="Insert" onOk={() => ok()} disabled={!pick.length} /></>}>

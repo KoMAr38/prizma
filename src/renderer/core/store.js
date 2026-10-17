@@ -170,19 +170,28 @@ export const bytesToBase64 = bytes => new Promise((resolve, reject) => {
 })
 
 // ---------- mutations ----------
+// The updates made inside fn are one undo step; with a key, the next oneStep with that key soon after joins it too
+let step = null
+export function oneStep (fn, key) {
+  const outer = step
+  step = step || { key, done: false }
+  try { return fn() } finally { step = outer }
+}
 export function update (recipe, opts = {}) {
   const prev = doc.value
   if (!prev) return
   const next = produce(prev, recipe)
   if (next === prev) return
   const now = Date.now()
+  const key = opts.coalesce || step?.key, merge = opts.merge || !!step?.done
   // quick repeats merge into one undo step, but only on the same slide (duplicated slides share element ids)
-  const coalesce = opts.merge || (opts.coalesce && opts.coalesce === lastKey && now - lastTime < (opts.window || 1200) && slideIdx.value === lastSlide)
+  const coalesce = merge || (key && key === lastKey && now - lastTime < (opts.window || 1200) && slideIdx.value === lastSlide)
   if (!coalesce || !undoStack.length) {
     undoStack.push({ doc: prev, slideIdx: slideIdx.value, selection: selection.value })
     if (undoStack.length > MAX_UNDO) undoStack.shift()
   }
-  if (!opts.merge) { lastKey = opts.coalesce || null; lastTime = now; lastSlide = slideIdx.value }
+  if (!merge) { lastKey = key || null; lastTime = now; lastSlide = slideIdx.value }
+  if (step) step.done = true
   redoStack.length = 0
   batch(() => {
     doc.value = next

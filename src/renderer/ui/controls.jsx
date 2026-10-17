@@ -2,8 +2,8 @@
 import { useRef, useState, useEffect } from 'preact/hooks'
 import { Icon } from './Icon.jsx'
 import { openPop, togglePop, closePop, Menu } from './popover.jsx'
-import { SLOTS, SLOT_LABEL, STANDARD_COLORS, hexColor, luminance, cssColor } from '../core/model.js'
-import { theme as themeSig, recentColors, fonts, settings } from '../core/store.js'
+import { SLOTS, SLOT_LABEL, STANDARD_COLORS, hexColor, luminance, cssColor, uid } from '../core/model.js'
+import { theme as themeSig, recentColors, fonts, settings, oneStep } from '../core/store.js'
 
 const keep = e => e.preventDefault() // keep focus (and the text selection) in the editor
 
@@ -235,7 +235,9 @@ export function Select ({ value, options, onChange, width, disabled, tip }) {
   )
 }
 export function Slider ({ value, min = 0, max = 100, step = 1, onChange, onInput, width = 120, label }) {
-  return <input type="range" class="slider" aria-label={label} style={{ width: width + 'px', '--p': ((value - min) / (max - min) * 100) + '%' }} min={min} max={max} step={step} value={value} onInput={e => (onInput || onChange)(+e.currentTarget.value)} onChange={e => onChange(+e.currentTarget.value)} />
+  const [key] = useState(() => uid('slider')) // a drag of the slider is one undo step
+  const send = (fn, v) => oneStep(() => fn(v), key)
+  return <input type="range" class="slider" aria-label={label} style={{ width: width + 'px', '--p': ((value - min) / (max - min) * 100) + '%' }} min={min} max={max} step={step} value={value} onInput={e => send(onInput || onChange, +e.currentTarget.value)} onChange={e => send(onChange, +e.currentTarget.value)} />
 }
 export function Field ({ label, children, cls = '' }) {
   return <label class={'fld ' + cls}><span class="fld-l">{label}</span>{children}</label>
