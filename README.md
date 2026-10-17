@@ -4,6 +4,8 @@ A presentation studio for Windows. It opens and saves PowerPoint files (.pptx), 
 
 Created and vibe-coded by Marko Veselinović.
 
+The code is public so it can be read, but Prizma is not open source. All rights are reserved; see LICENSE.
+
 ## Build
 
 ```
