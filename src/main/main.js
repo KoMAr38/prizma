@@ -474,7 +474,6 @@ ipcMain.handle('fs:write-piece', async (e, id, data) => {
   return true
 })
 ipcMain.handle('fs:close', async (e, id, keep) => { handleOf(e, id); await closeHandle(id, !!keep); return true })
-ipcMain.handle('fs:exists', (e, p) => fs.existsSync(p))
 ipcMain.handle('fs:stat', async (e, p) => { const s = await fsp.stat(p); return { size: s.size, mtime: s.mtimeMs, ctime: s.birthtimeMs } })
 ipcMain.handle('settings:set', (e, patch) => {
   settings = { ...settings, ...patch }
@@ -527,7 +526,6 @@ ipcMain.on('win:file', (e, p) => { const r = recOf(e); if (r) { r.file = p || nu
 ipcMain.on('win:idle', (e, v) => { const r = recOf(e); if (r) r.idle = !!v })
 ipcMain.on('win:force-close', e => { const r = recOf(e); if (r) { r.forceClose = true; r.win.close() } })
 ipcMain.on('win:theme', (e, theme) => { const w = BrowserWindow.fromWebContents(e.sender); if (w && CHROME[theme]) applyChrome(w, CHROME[theme]) })
-ipcMain.on('app:quit', () => app.quit())
 
 function applyChrome (w, t) {
   try { w.setBackgroundColor(t.bg) } catch {}
