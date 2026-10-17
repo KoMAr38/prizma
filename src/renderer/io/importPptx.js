@@ -3,7 +3,7 @@
 import JSZip from 'jszip'
 import { parse as pptxParse } from 'pptxtojson'
 import { uid, DEFAULT_INSET } from '../core/model.js'
-import { normalize, sanitize, syncBullet, BULLET_CHARS, NUM_FORMATS, htmlFromText } from '../core/html.js'
+import { normalize, sanitize, syncBullet, BULLET_CHARS, NUM_FORMATS } from '../core/html.js'
 import { addMedia, mediaInfo, native } from '../core/store.js'
 import { walk, pinSlideLinks } from '../core/model.js'
 import { THEMES, LAYOUTS } from '../core/themes.js'
@@ -183,7 +183,7 @@ function runDefaults (chain) {
   }
   return d
 }
-function fontFromTypeface (tf, th, isTitle) {
+function fontFromTypeface (tf, th) {
   if (!tf) return null
   if (tf.startsWith('+mj')) return th.fonts.major
   if (tf.startsWith('+mn')) return th.fonts.minor
@@ -455,7 +455,7 @@ async function analyse (zip) {
   const pres = await readXml(zip, 'ppt/presentation.xml')
   const presRels = await rels(zip, 'ppt/presentation.xml')
   const sldIds = kids(kid(pres.documentElement, 'sldIdLst'), 'sldId')
-  const slidePaths = sldIds.map(s => presRels[s.getAttribute('r:id') || s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id')]?.target).filter(Boolean)
+  const slidePaths = sldIds.map(s => presRels[s.getAttribute('r:id') || s.getAttributeNS(R_NS, 'id')]?.target).filter(Boolean)
   const defaultTextStyle = kid(pres.documentElement, 'defaultTextStyle')
   const cache = {}
   const loadPart = async p => { if (!cache[p]) cache[p] = { xml: await readXml(zip, p), rels: await rels(zip, p) }; return cache[p] }
@@ -519,7 +519,7 @@ async function analyse (zip) {
             info.tables[id] = { styleId: kid(pr, 'tableStyleId')?.textContent || tableStyleDefault, firstRow: on(pr?.getAttribute('firstRow')), bandRow: on(pr?.getAttribute('bandRow')), firstCol: on(pr?.getAttribute('firstCol')), lastCol: on(pr?.getAttribute('lastCol')), lastRow: on(pr?.getAttribute('lastRow')), explicit: kids(tbl, 'tr').map(tr => kids(tr, 'tc').map(tc => !!kid(kid(tc, 'tcPr'), 'solidFill'))) }
           }
           const chartRef = c.getElementsByTagNameNS('*', 'chart')[0]
-          const rid = chartRef && (chartRef.getAttribute('r:id') || chartRef.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'))
+          const rid = chartRef && (chartRef.getAttribute('r:id') || chartRef.getAttributeNS(R_NS, 'id'))
           if (id && rid && onSlide && sl.rels[rid]) { try { info.charts[id] = await chartInfo(zip, sl.rels[rid].target, scheme) } catch (e) { console.warn('chart info', e) } }
           continue
         }
@@ -1069,7 +1069,7 @@ async function readProps (zip) {
   return { title: get('title'), author: get('creator'), created: Date.parse(get('created')) || Date.now(), modified: Date.now() }
 }
 async function readShowProps (zip, nSlides) {
-  const show = { loop: false, presenter: true, useTimings: true, display: 'auto' }
+  const show = { loop: false, useTimings: true, display: 'auto' }
   const x = await readXml(zip, 'ppt/presProps.xml')
   const sp = x && kid(x.documentElement, 'showPr')
   if (!sp) return show
@@ -1187,4 +1187,3 @@ export async function importPptx (buffer, onProgress) {
     imported: !spec
   })
 }
-export { htmlFromText }
