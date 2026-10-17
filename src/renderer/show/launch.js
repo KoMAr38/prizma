@@ -1,5 +1,5 @@
 // Starts the slide show windows from the editor and takes back ink, timings and the last slide when it ends.
-import { doc, slideIdx, settings, native, allMedia, finishEditing, update, goSlide, showing, confirmDialog, toast } from '../core/store.js'
+import { doc, settings, native, allMedia, finishEditing, update, goSlide, showing, confirmDialog, toast } from '../core/store.js'
 import { uid } from '../core/model.js'
 
 let showWin = null, presWin = null, readWin = null

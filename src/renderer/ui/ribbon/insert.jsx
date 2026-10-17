@@ -3,8 +3,8 @@ import { signal } from '@preact/signals'
 import { useState } from 'preact/hooks'
 import { doc, tool, selection, openDialog, theme as themeSig, editing, slide, select, oneStep } from '../../core/store.js'
 import { hexColor, textBox } from '../../core/model.js'
-import { Group, Col, Row } from '../controls.jsx'
-import { Btn, Drop, Split, Icon, runCmd, A, NewSlideBtn, ShapesDrop, closePop } from './common.jsx'
+import { Group, Col } from '../controls.jsx'
+import { Btn, Drop, Icon, runCmd, A, NewSlideBtn, ShapesDrop, closePop } from './common.jsx'
 
 function TablePicker () {
   const [hov, setHov] = useState({ r: 0, c: 0 })

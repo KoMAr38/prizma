@@ -2,8 +2,8 @@
 import { useRef, useState, useEffect } from 'preact/hooks'
 import { Icon } from './Icon.jsx'
 import { openPop, togglePop, closePop, Menu } from './popover.jsx'
-import { SLOTS, SLOT_LABEL, STANDARD_COLORS, hexColor, luminance, cssColor, uid } from '../core/model.js'
-import { theme as themeSig, recentColors, fonts, settings, oneStep } from '../core/store.js'
+import { SLOT_LABEL, STANDARD_COLORS, hexColor, luminance, cssColor, uid } from '../core/model.js'
+import { theme as themeSig, recentColors, settings, oneStep } from '../core/store.js'
 
 const keep = e => e.preventDefault() // keep focus (and the text selection) in the editor
 

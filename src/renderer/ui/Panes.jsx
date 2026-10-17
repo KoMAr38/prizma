@@ -1,13 +1,13 @@
 // Task panes on the right: Format (shape/picture/text/background), Animation, Comments, Selection.
 import { useState, useRef } from 'preact/hooks'
 import {
-  doc, slide, selection, selected, pane, formatTab, select, updateEl, updateSlide, settings, appInfo, addMedia, theme as themeSig, editing, oneStep
+  doc, slide, selection, selected, pane, formatTab, select, updateEl, updateSlide, settings, appInfo, addMedia, theme as themeSig, oneStep
 } from '../core/store.js'
 import { solid, hexColor, DASHES, DASH_LABEL, ARROWS, ELEMENT_LABEL, walk, findEl, onSlide, recrop, uid } from '../core/model.js'
 import { slideBackground } from '../core/themes.js'
 import * as A from '../core/actions.js'
 import { Icon } from './Icon.jsx'
-import { Btn, Swatch, NumField, Slider, Radio, Check, Select, unitFmt, unitParse, TextInput, Field } from './controls.jsx'
+import { Swatch, NumField, Slider, Radio, Check, Select, unitFmt, unitParse, TextInput, Field } from './controls.jsx'
 import { contextMenu } from './popover.jsx'
 import { animById, ANIM_KIND, DIR_LABEL } from '../show/effects.js'
 import { unitStep } from './ribbon/common.jsx'

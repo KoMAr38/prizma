@@ -3,10 +3,10 @@ import { computed, signal } from '@preact/signals'
 import {
   doc, slide, slideIdx, selection, editing, editCell, slideSel, selected, canUndo, canRedo, undo, redo, zoom, fitZoom, view, ribbonTab,
   ribbonCollapsed, backstage, pane, formatTab, showNotes, showRuler, showGrid, showGuides, snapGrid, settings, native, painter, fmtTick,
-  docVersion, focusArea, tool, cropMode, openDialog, toast, select, goSlide, finishEditing, editorReq, theme as themeSig, searchOpen, update, grayscale, setSetting
+  docVersion, focusArea, tool, cropMode, openDialog, toast, select, goSlide, finishEditing, editorReq, theme as themeSig, searchOpen, grayscale, setSetting
 } from '../core/store.js'
 import * as A from '../core/actions.js'
-import { richState, stepSize } from '../core/html.js'
+import { richState } from '../core/html.js'
 import { findEl, textBox } from '../core/model.js'
 import { activeEditor, applyRun, paraOps, liveState } from '../editor/richEdit.js'
 import { fitPatch } from '../editor/TextEditor.jsx'

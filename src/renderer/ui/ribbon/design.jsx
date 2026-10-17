@@ -1,11 +1,11 @@
 // Design, Transitions, Animations and Slide Show tabs.
 import { useState, useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
-import { doc, slide, selection, settings, native, update, updateSlide, openDialog, theme as themeSig, pane, setSetting } from '../../core/store.js'
+import { doc, slide, selection, settings, native, update, updateSlide, openDialog, pane, setSetting } from '../../core/store.js'
 import { THEMES, makeDocTheme, newSlide, themeById } from '../../core/themes.js'
 import { SLIDE_SIZES } from '../../core/model.js'
 import { Group, Col, Row, Gallery, NumField, Check, Select, PickGrid } from '../controls.jsx'
-import { Btn, Drop, Split, Icon, runCmd, A, closePop } from './common.jsx'
+import { Btn, Drop, Icon, runCmd, A, closePop } from './common.jsx'
 import { SlideThumb } from '../Thumbs.jsx'
 import { TRANSITIONS, transitionById, ANIMS, ANIM_KIND, animById, DIR_LABEL } from '../../show/effects.js'
 

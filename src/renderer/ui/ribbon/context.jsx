@@ -5,8 +5,8 @@ import { pickPicture } from '../../app/commands.js'
 import { hexColor, solid, round2, recrop, findEl } from '../../core/model.js'
 import { Group, Col, Row, Gallery, PickGrid, NumField, Check, ColorBtn, unitFmt, unitParse, addRecentColor } from '../controls.jsx'
 import {
-  Btn, Drop, Split, Icon, runCmd, cmdEnabled, A, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker, QuickStylesGallery, FillBtn, OutlineBtn, EffectsBtn,
-  ArrangeGroup, alignMenu, rotateMenu, SizeFields, openFormat, outlineMenu, closePop, unitStep
+  Btn, Drop, Split, runCmd, cmdEnabled, A, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker, QuickStylesGallery, FillBtn, OutlineBtn, EffectsBtn,
+  ArrangeGroup, alignMenu, rotateMenu, SizeFields, openFormat, closePop, unitStep
 } from './common.jsx'
 import { FontColorBtn } from './home.jsx'
 import { WORDART, applyWordArt, wordArtCss } from './insert.jsx'

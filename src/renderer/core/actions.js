@@ -2,7 +2,7 @@
 import { batch } from '@preact/signals'
 import {
   doc, slide, slideIdx, selection, editing, editCell, slideSel, update, updateSlide, updateEls, select, goSlide,
-  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, painter, settings, appInfo, theme as themeSig, redraw
+  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, painter, settings, appInfo, theme as themeSig, redraw
 } from './store.js'
 import {
   uid, findEl, walk, parentGroups, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
