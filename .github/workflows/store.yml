@@ -1,0 +1,24 @@
+name: Microsoft Store package
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['store-*']
+
+jobs:
+  appx:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/build.mjs
+      - run: npx electron-builder --win appx --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prizma-store-package
+          path: release/*.appx
+          if-no-files-found: error

@@ -115,6 +115,17 @@
       "artifactName": "Prizma-Setup-${version}.exe",
       "deleteAppDataOnUninstall": false
     },
+    "appx": {
+      "applicationId": "Prizma",
+      "identityName": "MarkoVeselinovic.Prizma",
+      "publisher": "CN=00000000-0000-0000-0000-000000000000",
+      "publisherDisplayName": "Marko Veselinović",
+      "displayName": "Prizma",
+      "backgroundColor": "transparent",
+      "languages": [
+        "en-US"
+      ]
+    },
     "publish": []
   }
 }
