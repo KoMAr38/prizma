@@ -117,6 +117,3 @@ html[data-mode="capture"], html[data-mode="capture"] body { background: transpar
   .pp-root > .pp-page:last-child { break-after: auto; page-break-after: auto; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-
-/* developer gallery pages scroll like a normal web page */
-html[data-mode="gallery"], html[data-mode="gallery"] body, html[data-mode="test"], html[data-mode="test"] body { height: auto; overflow: visible; user-select: text; }

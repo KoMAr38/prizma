@@ -6,8 +6,6 @@ import './styles/slide.css'
 import './styles/app.css'
 import { App } from './app/App.jsx'
 import { ShowApp, PresenterApp, ReadingApp, CaptureApp } from './show/apps.jsx'
-import { TestView } from './dev/TestView.jsx'
-import { Gallery } from './dev/Gallery.jsx'
 import * as store from './core/store.js'
 import * as actions from './core/actions.js'
 import * as files from './app/files.js'
@@ -22,7 +20,7 @@ options.vnode = v => {
   if ((v.type === 'button' || v.type === 'a') && p['data-tip'] && p['aria-label'] === undefined) p['aria-label'] = p['data-tip']
   if (vnodeHook) vnodeHook(v)
 }
-const ROUTES = { editor: App, show: ShowApp, presenter: PresenterApp, reading: ReadingApp, capture: CaptureApp, test: TestView, gallery: Gallery }
+const ROUTES = { editor: App, show: ShowApp, presenter: PresenterApp, reading: ReadingApp, capture: CaptureApp }
 const mode = location.hash.replace('#', '') || 'editor'
 document.documentElement.dataset.mode = mode
 const gpu = soft => { document.documentElement.dataset.gpu = soft ? 'off' : 'on' }
