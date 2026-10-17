@@ -14,6 +14,8 @@ import { checkZipSize, checkDoc } from './nativeFormat.js'
 
 const EMU_PT = 1 / 12700
 const xmlDoc = s => new DOMParser().parseFromString(s, 'application/xml')
+// a string pptxtojson read keeps the file's XML entities (R&amp;D)
+const unent = s => typeof s === 'string' && s.includes('&') ? new DOMParser().parseFromString(s, 'text/html').documentElement.textContent : s
 const kids = (n, name) => n ? [...n.children].filter(c => c.localName === name) : []
 const kid = (n, name) => n ? [...n.children].find(c => c.localName === name) || null : null
 const path = (n, ...names) => { for (const nm of names) { n = kid(n, nm); if (!n) return null } return n }
@@ -886,7 +888,7 @@ function convertEl (e, ctx) {
   const sinfo = e.id ? (ctx.keyed ? ctx.info.shapes[e.id + '|' + e.name] : ctx.info.shapes[e.id]) : null
   const meta = e.id ? ctx.info.meta?.[e.id] : null
   // objects paired for Morph ("!!" names) share one id across slides, as they do in Prizma
-  let id = uid(), name = e.name || meta?.name
+  let id = uid(), name = meta?.name || e.name
   if (ctx.morph && /^!!/.test(name || '')) {
     id = ctx.morph.get(name) || id
     ctx.morph.set(name, id)
@@ -1008,12 +1010,12 @@ function convertEl (e, ctx) {
       const first = data[0]
       // scatter and bubble charts arrive as plain lists: [x values, y values of series 1, of series 2, …]
       const xy = Array.isArray(first)
-      const cats = g.categories || (xy ? first.map(String) : first?.xlabels ? Object.keys(first.xlabels).sort((a, b) => +a - +b).map(k => first.xlabels[k]) : (first?.values || []).map(v => String(v.x)))
+      const cats = g.categories || (xy ? first.map(String) : first?.xlabels ? Object.keys(first.xlabels).sort((a, b) => +a - +b).map(k => unent(first.xlabels[k])) : (first?.values || []).map(v => String(v.x)))
       const T = g.chartType || ''
       const type = /bar/i.test(T) ? (g.barDir === 'bar' ? 'bar' : 'column') : /line/i.test(T) ? 'line' : /area/i.test(T) ? 'area' : /doughnut/i.test(T) ? 'doughnut' : /pie/i.test(T) ? 'pie' : /scatter|bubble/i.test(T) ? 'scatter' : /radar/i.test(T) ? 'radar' : 'column'
       const series = g.series || (xy
         ? data.slice(1).map((ys, i) => ({ name: 'Series ' + (i + 1), values: ys.map(v => +v || 0) }))
-        : data.map(s => ({ name: s.key ?? 'Series', values: (s.values || []).map(v => +v.y || 0) })))
+        : data.map(s => ({ name: unent(s.key) ?? 'Series', values: (s.values || []).map(v => +v.y || 0) })))
       let colors = (e.colors || []).filter(Boolean)
       if (cx?.seriesColors?.some(Boolean)) colors = cx.seriesColors.map((c, i) => c || colors[i]).filter(Boolean)
       return {
@@ -1082,6 +1084,9 @@ export async function importPptx (buffer, onProgress) {
   onProgress?.('Converting slides')
   // no media from pptxtojson: it throws on linked files and drops m4a/mov/wmv; convertEl reads them from the package
   const json = await pptxParse(buffer, { imageMode: 'none', videoMode: 'none', audioMode: 'none', singleLineSpacingFactor: 1.2 })
+  // names are matched with the ones read from the XML, which have their entities decoded
+  const names = l => { for (const e of l || []) { e.name = unent(e.name); names(e.elements) } }
+  for (const s of json.slides) { names(s.elements); names(s.layoutElements) }
   // pptxtojson takes slides by part name ([Content_Types].xml, sorted by number); the deck's order is sldIdLst's
   const parsed = kids((await readXml(zip, '[Content_Types].xml'))?.documentElement, 'Override')
     .filter(o => o.getAttribute('ContentType') === 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml')

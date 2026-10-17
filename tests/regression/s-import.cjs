@@ -73,6 +73,15 @@ module.exports = async ({ page, ev, wait, errors, OUT }) => {
     check(at('D') === '0,108,0,false,true' && at('D2') === '108,0,0,false,true', 'upside down too: ' + [at('D'), at('D2')].join(' / '))
   })
 
+  await sec('entities', async () => {
+    // names and chart texts with "&" and "<" (&amp; and &lt; in the file), on a slide and on its layout
+    const d = (await open('entities.pptx')).doc
+    const names = l => (l || []).map(e => e.name)
+    check(names(d.slides[0].elements).includes('R&D box') && names(d.slides[0].master).includes('Tom & Jerry'), 'names keep "&": ' + JSON.stringify([names(d.slides[0].elements), names(d.slides[0].master)]))
+    const [a, b] = [d.slides[0].master, d.slides[1].elements].map(l => (l || []).find(e => e.type === 'chart')).map(c => JSON.stringify([c?.categories, c?.series?.map(s => s.name)]))
+    check(a === '[["A&B","C<D"],["S&P"]]' && b === a, 'chart texts keep "&" and "<", on a layout too: ' + a + ' / ' + b)
+  })
+
   await sec('prizma files', async () => {
     const good = (await open('flipped-groups.pptx')).doc
     const prizma = async (name, doc, more) => {
