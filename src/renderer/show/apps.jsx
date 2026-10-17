@@ -79,7 +79,8 @@ export function PresenterApp () {
     channel.postMessage({ type: 'cmd', cmd: 'hello' })
     return () => channel.removeEventListener('message', on)
   }, [])
-  useEffect(() => { const iv = setInterval(() => { if (!paused) setElapsed(x => x + 1) }, 1000); return () => clearInterval(iv) }, [paused])
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => { const iv = setInterval(() => { setNow(new Date()); if (!paused) setElapsed(x => x + 1) }, 1000); return () => clearInterval(iv) }, [paused])
   useLayoutEffect(() => {
     const el = boxRef.current
     if (!el) return
@@ -124,7 +125,7 @@ export function PresenterApp () {
           <button onClick={() => setPaused(!paused)} data-tip={paused ? 'Resume timer' : 'Pause timer'}><Icon name={paused ? 'play' : 'pause'} size={15} /></button>
           <button onClick={() => setElapsed(0)} data-tip="Restart timer"><Icon name="rotate-ccw" size={15} /></button>
         </div>
-        <div class="pv-clock">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        <div class="pv-clock">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
         <div class="pv-count">Slide {state.i + 1} of {d.slides.length}</div>
         <button class="btn" onClick={() => cmd('end')}><Icon name="x" size={15} />End slide show</button>
       </header>
