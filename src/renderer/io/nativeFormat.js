@@ -39,12 +39,24 @@ export function writeNative (d) {
   return zip
 }
 
+// A few MB can unpack to gigabytes and take the window down. JSZip reads a size of 2 GB or more as negative.
+// shortcut: trusts the sizes the zip declares (JSZip keeps them on _data); count bytes while unpacking if lying zips turn up
+export function checkZipSize (zip) {
+  if (Object.values(zip.files).reduce((n, f) => n + (f._data?.uncompressedSize >>> 0), 0) > 1.5 * 1024 ** 3) throw new Error(`This file unpacks to more than 1.5 GB, so Prizma won't open it.`)
+}
+// A document read from a file has its slides, size and theme, or it stops here rather than deep inside the editor
+export function checkDoc (d) {
+  if (!Array.isArray(d?.slides) || !(d.size?.w > 0 && d.size?.h > 0) || !d.theme || typeof d.theme !== 'object') throw new Error('This presentation is damaged: its slides, size or theme are missing.')
+  return d
+}
+
 export async function readNative (bytes) {
   const zip = await JSZip.loadAsync(bytes)
+  checkZipSize(zip)
   const f = zip.file('document.json')
   if (!f) throw new Error('This is not a Prizma presentation.')
   const data = JSON.parse(await f.async('string'))
-  const d = data.doc
+  const d = checkDoc(data?.doc)
   for (const [id, m] of Object.entries(data.media || {})) {
     const mf = zip.file(m.file)
     if (!mf) continue

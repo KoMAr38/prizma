@@ -10,6 +10,7 @@ import { THEMES, LAYOUTS } from '../core/themes.js'
 import { readTransition, readTiming } from './pptx/anim.js'
 import { seal, TWIN_NS, adjFromAvLst } from './pptx/xml.js'
 import { SHAPES } from '../core/shapes.js'
+import { checkZipSize, checkDoc } from './nativeFormat.js'
 
 const EMU_PT = 1 / 12700
 const xmlDoc = s => new DOMParser().parseFromString(s, 'application/xml')
@@ -436,6 +437,7 @@ async function readTwin (zip) {
     if (seal([pres, ...await Promise.all(slides.map(f => f.async('string')))]) !== root.getAttribute('seal')) return null
     try {
       const data = JSON.parse(root.textContent)
+      checkDoc(data?.doc)
       for (const [id, m] of Object.entries(data.media || {})) {
         const f = zip.file(m.part)
         if (f) addMedia(await f.async('uint8array'), m.mime, id)
@@ -1072,9 +1074,7 @@ async function readShowProps (zip, nSlides) {
 export async function importPptx (buffer, onProgress) {
   onProgress?.('Reading file')
   const zip = await JSZip.loadAsync(buffer)
-  // a few MB can unpack to gigabytes and take the window down
-  // shortcut: trusts the sizes the zip declares (JSZip keeps them on _data); count bytes while unpacking if lying zips turn up
-  if (Object.values(zip.files).reduce((n, f) => n + (f._data?.uncompressedSize || 0), 0) > 1.5 * 1024 ** 3) throw new Error(`This file unpacks to more than 1.5 GB, so Prizma won't open it.`)
+  checkZipSize(zip)
   const twin = await readTwin(zip)
   if (twin) return pinSlideLinks(twin, sanitize)
   const info = await analyse(zip)

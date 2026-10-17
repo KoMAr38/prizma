@@ -1,5 +1,7 @@
-// Reading files Prizma did not write: the fixtures in imp/ are small decks with the objects that used to go wrong
-const path = require('path')
+// Reading files from elsewhere: the fixtures in imp/ are small decks with the objects that used to go wrong, and
+// .prizma files made here that no Prizma would write
+const path = require('path'), fs = require('fs')
+const JSZip = require('../../node_modules/jszip')
 const IMP = path.join(__dirname, 'imp')
 module.exports = async ({ page, ev, wait, errors, OUT }) => {
   const check = (ok, msg) => { console.log((ok ? 'ok   ' : 'FAIL ') + msg); if (!ok) errors.push(msg) }
@@ -69,5 +71,55 @@ module.exports = async ({ page, ev, wait, errors, OUT }) => {
     check(at('A') === '216,0,330,true,false' && at('E') === '0,108,0,true,false', 'a flipped group\'s shapes are mirrored in it: ' + [at('A'), at('E')].join(' / '))
     check(at('B') === '0,72,0,false,false' && at('C') === '108,0,0,true,false' && at('C2') === '0,36,0,true,false', 'and so are the shapes of a group inside it: ' + ['B', 'C', 'C2'].map(at).join(' / '))
     check(at('D') === '0,108,0,false,true' && at('D2') === '108,0,0,false,true', 'upside down too: ' + [at('D'), at('D2')].join(' / '))
+  })
+
+  await sec('prizma files', async () => {
+    const good = (await open('flipped-groups.pptx')).doc
+    const prizma = async (name, doc, more) => {
+      const z = new JSZip()
+      z.file('document.json', JSON.stringify({ app: 'Prizma', format: 1, doc, media: {} }))
+      more?.(z)
+      const p = path.join(OUT, name)
+      fs.writeFileSync(p, await z.generateAsync({ type: 'nodebuffer' }))
+      return p
+    }
+    // a refused file logs its error (files.js); those lines are expected here and judged by the checks
+    const refused = async p => {
+      const n = errors.length, r = await open(p)
+      await wait(300)
+      for (let i = errors.length - 1; i >= n; i--) if (/^editor console: Error: (This presentation is damaged|This file unpacks)/.test(errors[i])) errors.splice(i, 1)
+      return r
+    }
+    // a slide id with markup in it, in a slide link of a text: the text is cleaned after the id went in
+    const bad = JSON.parse(JSON.stringify(good))
+    bad.slides[0].id = 'x"><img src=x onerror="window.__pwned=1">'
+    bad.slides[0].elements.push({ ...bad.slides[0].elements[0].children[0], id: 'link1', html: '<p><a href="#slide:0">go</a></p>' })
+    const r = await open(await prizma('link.prizma', bad))
+    const h = r.doc.slides[0]?.elements.find(e => e.id === 'link1')?.html
+    check(r.res === true && h && !/onerror|<img/.test(h), 'a slide id from a file puts no markup into text: ' + h)
+    // a document that says it unpacks to 4 GB
+    const big = await prizma('big.prizma', good, z => z.file('big.bin', 'x'))
+    const b = fs.readFileSync(big)
+    b.writeUInt32LE(0xC0000000, b.lastIndexOf('big.bin') - 46 + 24) // its size in the central directory: 3 GB
+    fs.writeFileSync(big, b)
+    const r2 = await refused(big)
+    check(r2.res === false && /1\.5 GB/.test(r2.toast), 'a .prizma that unpacks to more than 1.5 GB is refused: ' + r2.toast)
+    for (const [name, doc] of [['no-theme', { ...good, theme: null }], ['no-slides', { ...good, slides: {} }], ['no-size', { ...good, size: {} }]]) {
+      const r3 = await refused(await prizma(name + '.prizma', doc))
+      check(r3.res === false && /damaged/.test(r3.toast), `a .prizma with ${name.replace('-', ' ')} is refused with a clear message: ` + r3.toast)
+    }
+    // the copy of the document in a .pptx Prizma saved: without its theme it is passed over and the slides are read
+    const p = path.join(OUT, 'twin.pptx'), q = path.join(OUT, 'twin-no-theme.pptx')
+    await ev(`__pz.files.writeTo(${JSON.stringify(p)}, 'pptx')`)
+    const id = await ev(`__pz.store.doc.value.id`)
+    const z = await JSZip.loadAsync(fs.readFileSync(p))
+    const x = await z.file('customXml/item1.xml').async('string')
+    const json = /<pz:document[^>]*>([^<]*)</.exec(x)[1]
+    const data = JSON.parse(json.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))
+    delete data.doc.theme
+    z.file('customXml/item1.xml', x.replace(json, () => JSON.stringify(data).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')))
+    fs.writeFileSync(q, await z.generateAsync({ type: 'nodebuffer' }))
+    const [t1, t2] = [await open(p), await open(q)]
+    check(t1.doc.id === id && t2.res === true && t2.doc.id !== id && t2.doc.slides.length === good.slides.length, `a Prizma copy without a theme is passed over (${t1.doc.id === id}, ${t2.res}, ${t2.doc.id !== id})`)
   })
 }
