@@ -402,9 +402,8 @@ export function layoutPlaceholders (layoutId, size, theme) {
   const W = size.w, H = size.h, mx = W * 0.07
   const T = spec.title, B = spec.body
   const kind = layoutKind(layoutId)
-  const onAccent = (kind === 'title' && spec.titleSlideText) || (kind === 'section' && spec.sectionText)
+  const onAccent = kind === 'section' && spec.sectionText
   const titleColor = onAccent || T.color
-  const subColor = kind === 'title' && spec.titleSlideText ? spec.titleSlideText : spec.sub.color
   const ph = (role, x, y, w, h, ts, extra = {}) => ({
     id: uid(), type: 'text', name: role === 'title' ? 'Title' : role === 'subTitle' ? 'Subtitle' : role === 'pic' ? 'Picture Placeholder' : 'Content Placeholder',
     ph: role, x, y, w, h, rot: 0, html: role === 'body' ? BULLET_P : PLAIN_P, fill: null, line: null, inset: { ...DEFAULT_INSET },
@@ -419,7 +418,7 @@ export function layoutPlaceholders (layoutId, size, theme) {
       const align = spec.titleSlideAlign || T.align
       return [
         ph('title', mx, H * 0.3, tw, H * 0.22, titleTs(Math.round(T.size * 1.35), align), { vAlign: 'bottom' }),
-        ph('subTitle', mx, H * 0.56, tw, H * 0.16, { ...bodyTs(B.size, subColor), align }, { vAlign: 'top' })
+        ph('subTitle', mx, H * 0.56, tw, H * 0.16, { ...bodyTs(B.size, spec.sub.color), align }, { vAlign: 'top' })
       ]
     }
     case 'section':
@@ -495,7 +494,7 @@ export function newDocument (themeId = 'blank', variant = 0, size = { w: 960, h:
     v: 1, id: uid('d'), size: { ...size }, theme,
     slides: [newSlide('title', size, theme)],
     props: { title: '', author: '', created: Date.now(), modified: Date.now() },
-    show: { loop: false, presenter: true, useTimings: true, display: 'auto' },
+    show: { loop: false, useTimings: true, display: 'auto' },
     hf: { number: false, footer: '', date: false, dateText: '', hideOnTitle: true }
   }
 }

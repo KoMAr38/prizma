@@ -2,12 +2,12 @@
 import { useState, useEffect, useMemo } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import {
-  backstage, doc, file, dirty, appInfo, settings, recovery, native, update, toast, slideIdx, theme as themeSig
+  backstage, doc, file, appInfo, settings, recovery, native, update, slideIdx
 } from '../core/store.js'
 import { THEMES } from '../core/themes.js'
 import { SLIDE_SIZES } from '../core/model.js'
 import { Icon } from './Icon.jsx'
-import { Check, Radio, Select, NumField, TextInput, Field } from './controls.jsx'
+import { Check, Radio, Select, TextInput, Field } from './controls.jsx'
 import { contextMenu } from './popover.jsx'
 import { ThemeThumb } from './ribbon/design.jsx'
 import { wordCount } from './dialogs.jsx'

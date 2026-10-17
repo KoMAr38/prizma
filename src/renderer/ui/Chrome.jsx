@@ -6,7 +6,7 @@ import {
 } from '../core/store.js'
 import { Icon } from './Icon.jsx'
 import { Btn, Slider } from './controls.jsx'
-import { openPop, closePop, togglePop } from './popover.jsx'
+import { closePop, togglePop } from './popover.jsx'
 import { CMDS, runCmd, cmdEnabled, zoomBy, uiShown } from '../app/commands.js'
 import * as A from '../core/actions.js'
 
@@ -53,7 +53,7 @@ export function TitleBar () {
 }
 
 // "Tell me" search: finds commands by name and runs them
-const searchable = computed(() => Object.values(CMDS).filter(c => c.label && !c.hiddenFromSearch))
+const searchable = computed(() => Object.values(CMDS).filter(c => c.label))
 function Search () {
   const ref = useRef(null)
   const inp = useRef(null)
@@ -168,4 +168,3 @@ export function Splitter ({ dir = 'v', onDrag, onEnd, tip }) {
   }
   return <div class={'splitter splitter-' + dir} onPointerDown={down} data-tip={tip} />
 }
-export { Btn }

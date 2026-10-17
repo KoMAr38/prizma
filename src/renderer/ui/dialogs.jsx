@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'preact/hooks'
 import {
   dialog, closeDialog, doc, slide, slideIdx, selection, selected, editing, editCell, editorReq, settings, fonts, zoom, fitZoom, native, update, updateEl,
-  select, goSlide, toast, appInfo, theme as themeSig, finishEditing, findState, recentColors
+  select, goSlide, appInfo, theme as themeSig, finishEditing, findState
 } from '../core/store.js'
 import { SLIDE_SIZES, hexColor, textBox, findEl } from '../core/model.js'
 import { textOf, FONT_SIZES, searchRe } from '../core/html.js'
@@ -11,11 +11,10 @@ import { Icon, ICON_NAMES } from './Icon.jsx'
 import { NumField, Check, Radio, Select, Combo, TextInput, Field, unitFmt, unitParse, Swatch } from './controls.jsx'
 import { pop } from './popover.jsx'
 import { CHART_TYPES } from '../render/chart.jsx'
-import { activeEditor, applyRun, applyPara, liveState } from '../editor/richEdit.js'
-import { fmtState, fontLabel, setFontFace, setFontSize, textRun, textPara, CMDS, refitSoon } from '../app/commands.js'
+import { activeEditor, applyPara, liveState } from '../editor/richEdit.js'
+import { fmtState, fontLabel, setFontFace, setFontSize, textRun, refitSoon } from '../app/commands.js'
 import { fontOptions, renderFont } from './ribbon/home.jsx'
 import { SlideThumb } from './Thumbs.jsx'
-import { previewReq } from './ribbon/design.jsx'
 
 export function Dialog ({ title, children, footer, width = 460, onClose = closeDialog, cls = '', onEnter }) {
   const ref = useRef(null)

@@ -1,7 +1,7 @@
 // Review, View and Help tabs.
 import { doc, slideIdx, pane, showRuler, showGrid, showGuides, snapGrid, showNotes, grayscale, settings, view, update, updateSlide, goSlide, openDialog } from '../../core/store.js'
 import { Group, Col, Check } from '../controls.jsx'
-import { Btn, Drop, Icon, runCmd } from './common.jsx'
+import { Btn, Drop, runCmd } from './common.jsx'
 import { setUiTheme } from '../../app/commands.js'
 
 export function ReviewTab () {

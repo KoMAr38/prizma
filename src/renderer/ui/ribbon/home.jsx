@@ -1,11 +1,11 @@
 // Home tab: clipboard, slides, font, paragraph, drawing, editing.
-import { doc, slide, slideSel, selection, selected, painter, fonts, theme as themeSig, lastColors, openDialog } from '../../core/store.js'
-import { FONT_SIZES, BULLET_CHARS } from '../../core/html.js'
+import { slide, slideSel, selection, selected, painter, fonts, theme as themeSig, lastColors, openDialog } from '../../core/store.js'
+import { FONT_SIZES } from '../../core/html.js'
 import { fontStack } from '../../core/model.js'
-import { Group, Col, Row, Combo, Gallery } from '../controls.jsx'
+import { Group, Col, Row, Combo } from '../controls.jsx'
 import { fmtState, fontLabel, setFontFace, setFontSize, textRun, textPara } from '../../app/commands.js'
 import {
-  Btn, Drop, Split, ColorBtn, Icon, runCmd, A, NewSlideBtn, LayoutPicker, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker,
+  Btn, Drop, Split, ColorBtn, runCmd, A, NewSlideBtn, LayoutPicker, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker,
   arrangeMenu, shapeStyles, StyleSwatch, applyShapeStyle, FillBtn, OutlineBtn, EffectsBtn, openFormat
 } from './common.jsx'
 import { PickGrid } from '../controls.jsx'
@@ -184,4 +184,3 @@ export function HomeTab () {
     </>
   )
 }
-export { Icon }
