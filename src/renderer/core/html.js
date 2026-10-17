@@ -14,8 +14,11 @@ export const NUM_FORMATS = {
 const frag = html => { const t = document.createElement('template'); t.innerHTML = html || ''; return t.content }
 const serialize = f => { const d = document.createElement('div'); d.appendChild(f); return d.innerHTML }
 
+// DOMPurify's own rule for link addresses, with files too (file:, C:\…); javascript:, data: and vbscript: stay out
+const ALLOWED_URI_REGEXP = /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix|file):|[a-z]:[\\/]|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i
+
 export function sanitize (html) {
-  return DOMPurify.sanitize(html || '', { ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false })
+  return DOMPurify.sanitize(html || '', { ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false, ALLOWED_URI_REGEXP })
 }
 
 // Flattens lists/divs into top-level <p> elements and guarantees at least one paragraph.

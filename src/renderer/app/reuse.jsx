@@ -1,8 +1,9 @@
 // Home › New slide › "Slides from another presentation…": pick slides from a file and insert them after the current slide.
-import { useState } from 'preact/hooks'
-import { doc, slideIdx, native, busy, toast, openDialog, closeDialog, update, goSlide } from '../core/store.js'
+import { useState, useEffect } from 'preact/hooks'
+import { doc, slideIdx, native, busy, toast, openDialog, closeDialog, update, goSlide, allMedia, keepMedia } from '../core/store.js'
 import { uid, walk, mapSlideLinks } from '../core/model.js'
 import { fitSlides } from '../core/actions.js'
+import { readNative, usedMedia } from '../io/nativeFormat.js'
 import { Dialog } from '../ui/dialogs.jsx'
 import { SlideThumb } from '../ui/Thumbs.jsx'
 import { Icon } from '../ui/Icon.jsx'
@@ -16,20 +17,25 @@ export async function reuseSlides () {
   const p = paths && paths[0]
   if (!p) return
   busy.value = { label: `Reading ${baseName(p)}…` }
+  // the other file's media stay while the dialog shows them; then only those the inserted slides use are kept
+  const before = new Set(allMedia().keys())
+  const drop = () => { const used = usedMedia(doc.value); keepMedia(new Set([...allMedia().keys()].filter(id => before.has(id) || used.has(id)))) }
   try {
     const bytes = await native.readFile(p)
     const src = extOf(p) === 'prizma'
-      ? await (await import('../io/nativeFormat.js')).readNative(bytes)
+      ? await readNative(bytes)
       : await (await import('../io/importPptx.js')).importPptx(bytes)
-    openDialog('custom', { C: ReuseDlg, src, name: baseName(p) })
+    openDialog('custom', { C: ReuseDlg, src, name: baseName(p), drop })
   } catch (e) {
+    drop()
     toast(`Couldn't read ${baseName(p)}: ${e.message || e}`, { kind: 'error' })
   } finally {
     busy.value = null
   }
 }
 
-function ReuseDlg ({ src, name }) {
+function ReuseDlg ({ src, name, drop }) {
+  useEffect(() => drop, [])
   const [picked, setPicked] = useState(() => new Set())
   const toggle = id => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const insert = ids => {

@@ -3,16 +3,19 @@
 import JSZip from 'jszip'
 import { parse as pptxParse } from 'pptxtojson'
 import { uid, DEFAULT_INSET } from '../core/model.js'
-import { normalize, sanitize, syncBullet, BULLET_CHARS, NUM_FORMATS, htmlFromText } from '../core/html.js'
+import { normalize, sanitize, syncBullet, BULLET_CHARS, NUM_FORMATS } from '../core/html.js'
 import { addMedia, mediaInfo, native } from '../core/store.js'
 import { walk, pinSlideLinks } from '../core/model.js'
 import { THEMES, LAYOUTS } from '../core/themes.js'
 import { readTransition, readTiming } from './pptx/anim.js'
 import { seal, TWIN_NS, adjFromAvLst } from './pptx/xml.js'
 import { SHAPES } from '../core/shapes.js'
+import { checkZipSize, checkDoc } from './nativeFormat.js'
 
 const EMU_PT = 1 / 12700
 const xmlDoc = s => new DOMParser().parseFromString(s, 'application/xml')
+// a string pptxtojson read keeps the file's XML entities (R&amp;D)
+const unent = s => typeof s === 'string' && s.includes('&') ? new DOMParser().parseFromString(s, 'text/html').documentElement.textContent : s
 const kids = (n, name) => n ? [...n.children].filter(c => c.localName === name) : []
 const kid = (n, name) => n ? [...n.children].find(c => c.localName === name) || null : null
 const path = (n, ...names) => { for (const nm of names) { n = kid(n, nm); if (!n) return null } return n }
@@ -180,22 +183,44 @@ function runDefaults (chain) {
   }
   return d
 }
-function fontFromTypeface (tf, th, isTitle) {
+function fontFromTypeface (tf, th) {
   if (!tf) return null
   if (tf.startsWith('+mj')) return th.fonts.major
   if (tf.startsWith('+mn')) return th.fonts.minor
   return tf
 }
 
-// Chart extras that pptxtojson does not expose (legend, title, labels, font size, colours)
+// A chart's cached range (c:cat, c:val, c:xVal…) as cell texts by point index, so a blank cell keeps its place; category
+// levels join outer level first ("2023 Q1"), an outer label holding until the next one
+function chartCells (n, max) {
+  const c = n && [...n.children].map(r => /Lit$/.test(r.localName) ? r : [...r.children].find(x => /Cache$/.test(x.localName))).find(Boolean)
+  if (!c) return null
+  const lv = kids(c, 'lvl'), levels = (lv.length ? lv : [c]).map(l => new Map(kids(l, 'pt').map(p => [+p.getAttribute('idx'), kid(p, 'v')?.textContent ?? ''])))
+  let len = +kid(c, 'ptCount')?.getAttribute('val') || 0
+  for (const l of levels) for (const i of l.keys()) if (i >= len) len = i + 1
+  const last = levels.map(() => '')
+  return { fmt: kid(c, 'formatCode')?.textContent, cells: Array.from({ length: Math.min(len, max) }, (_, i) => levels.map((l, k) => (last[k] = l.get(i) ?? (k ? last[k] : ''))).reverse().filter(Boolean).join(' ')) }
+}
+// A category cell as PowerPoint shows it: a date format turns the Excel serial back into a date
+// shortcut: other number formats (%, decimals) show the plain value and 1904-based workbooks are 4 years off, read them if decks need it
+function catText (v, fmt) {
+  if (!v || !fmt || isNaN(+v)) return v
+  const f = fmt.replace(/\[[^\]]*\]|"[^"]*"|[\\_*]./g, '')
+  if (!/[dmy]/i.test(f) || /[hs]/i.test(f)) return v
+  return new Date(Math.round((+v - 25569) * 864e5)).toLocaleDateString(undefined, { timeZone: 'UTC', year: /yyyy/i.test(f) ? 'numeric' : /yy/i.test(f) ? '2-digit' : undefined, month: /mmmm/i.test(f) ? 'long' : /mmm/i.test(f) ? 'short' : /m/i.test(f) ? 'numeric' : undefined, day: /d/i.test(f) ? 'numeric' : undefined })
+}
+// Chart data and extras, read from the chart part: pptxtojson drops blank cells (later values slide into the wrong
+// categories), multi-level and date categories, and every chart group but the last
 async function chartInfo (zip, partPath, scheme) {
   const x = await readXml(zip, partPath)
   if (!x) return null
   const cs = x.documentElement
   const chart = kid(cs, 'chart')
   const plot = kid(chart, 'plotArea')
-  const typeNode = plot ? [...plot.children].find(n => /Chart$/.test(n.localName)) : null
-  const sers = typeNode ? kids(typeNode, 'ser') : []
+  const types = plot ? [...plot.children].filter(n => /Chart$/.test(n.localName) && kid(n, 'ser')) : []
+  const typeNode = types[0] || null
+  // a combo chart (columns and a line) keeps every series, drawn as its first chart type
+  const sers = types.flatMap(t => kids(t, 'ser'))
   const textOf = n => n ? [...n.getElementsByTagNameNS('*', 't')].map(t => t.textContent).join('') : ''
   // a series name is a cached cell value (c:v) or rich text (a:t)
   const serName = ser => { const tx = kid(ser, 'tx'); return tx ? [...tx.getElementsByTagNameNS('*', 'v')].map(v => v.textContent).join('') || textOf(tx) : '' }
@@ -205,8 +230,15 @@ async function chartInfo (zip, partPath, scheme) {
   const autoDeleted = yes(kid(chart, 'autoTitleDeleted'))
   let title = titleNode ? textOf(kid(titleNode, 'tx')) : ''
   if (titleNode && !title) title = sers.length === 1 ? serName(sers[0]) : 'Chart Title'
-  if (!titleNode && !autoDeleted && sers.length === 1 && typeNode && !/pie|doughnut/i.test(typeNode.localName)) title = ''
   if (!titleNode && !autoDeleted && sers.length === 1) title = serName(sers[0])
+  const xy = /scatter|bubble/i.test(typeNode?.localName || '')
+  // shortcut: a chart keeps at most a million cells (a corrupt ptCount can't allocate gigabytes), raise it if real decks need more
+  const max = 1e6 / (sers.length || 1)
+  const cat = chartCells(kid(sers[0], xy ? 'xVal' : 'cat'), max), vals = sers.map(sr => chartCells(kid(sr, xy ? 'yVal' : 'val'), max)?.cells || [])
+  // every point gets a category, so a save writes all the values
+  const len = Math.max(cat?.cells.length || 0, ...vals.map(v => v.length))
+  const categories = Array.from({ length: len }, (_, i) => cat ? catText(cat.cells[i] ?? '', cat.fmt) : String(i + 1))
+  const series = sers.map((sr, i) => ({ name: serName(sr) || 'Series ' + (i + 1), values: Array.from({ length: len }, (_, j) => +vals[i][j] || 0) }))
   const legend = kid(chart, 'legend')
   const legendPos = legend ? (kid(legend, 'legendPos')?.getAttribute('val') || 'r') : null
   const dl = typeNode ? kid(typeNode, 'dLbls') : null
@@ -214,7 +246,8 @@ async function chartInfo (zip, partPath, scheme) {
   const labels = !!(anyLabel(dl) || sers.some(sr => anyLabel(kid(sr, 'dLbls'))))
   const szNode = kid(kid(kid(cs, 'txPr'), 'p') || null, 'pPr')
   const sz = szNode ? kid(szNode, 'defRPr')?.getAttribute('sz') : null
-  const seriesColors = sers.map(sr => colorOf(kid(kid(sr, 'spPr'), 'solidFill'), scheme))
+  // a line series has its colour on the line
+  const seriesColors = sers.map(sr => colorOf(kid(kid(sr, 'spPr'), 'solidFill') || kid(kid(kid(sr, 'spPr'), 'ln'), 'solidFill'), scheme))
   const firstSer = sers[0]
   const pointColors = firstSer ? kids(firstSer, 'dPt').map(d => ({ idx: +(kid(d, 'idx')?.getAttribute('val') || 0), color: colorOf(kid(kid(d, 'spPr'), 'solidFill'), scheme) })) : []
   const catAx = plot ? kid(plot, 'catAx') : null
@@ -223,7 +256,8 @@ async function chartInfo (zip, partPath, scheme) {
   // value-axis gridlines, as the chart has them (pie charts have no axes and keep the default)
   const valAxes = plot ? kids(plot, 'valAx') : []
   const gridlines = valAxes.length ? valAxes.some(ax => !!kid(ax, 'majorGridlines')) : null
-  return { title: title || '', legend: legendPos, labels, fontSize: sz ? +sz / 100 : null, seriesColors, pointColors, reversed, is3d, vary: yes(kid(typeNode, 'varyColors')), gridlines }
+  const attr = name => kid(typeNode, name)?.getAttribute('val')
+  return { chartType: typeNode?.localName, barDir: attr('barDir'), grouping: attr('grouping'), holeSize: attr('holeSize'), categories, series, title: title || '', legend: legendPos, labels, fontSize: sz ? +sz / 100 : null, seriesColors, pointColors, reversed, is3d, gridlines }
 }
 // Table style definitions from ppt/tableStyles.xml
 function parseTableStyles (xml, scheme) {
@@ -292,6 +326,7 @@ function styleCell (def, fl, r, c, rows, cols) {
 }
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+const VERTICAL = new Map([['vert', true], ['eaVert', true], ['vert270', 'vert270'], ['wordArtVert', 'stacked']])
 const DRAWN = new Set(['sp', 'cxnSp', 'pic', 'graphicFrame', 'grpSp', 'AlternateContent', 'contentPart'])
 const FILLS = new Set(['noFill', 'solidFill', 'gradFill', 'blipFill', 'pattFill', 'grpFill'])
 // Click actions on shapes: a jump to another slide, or a web/mail link
@@ -353,28 +388,28 @@ async function readMarker (zip) {
   return m
 }
 // Embedded objects (Excel tables, old charts, other slides…) can't run here; PowerPoint keeps a preview picture of
-// each, either inside the object or, in files converted from PowerPoint 2003, in the slide's VML drawing.
+// each, either in the frame (PowerPoint 2010 and later: in the object's fallback copy) or, in files converted from
+// PowerPoint 2003, in the VML drawing of the slide, layout or master.
 const PIC_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', emf: 'image/x-emf', wmf: 'image/x-wmf', svg: 'image/svg+xml' }
 // video and audio by extension, in the MIME names exportPptx turns back into the same extension
 const AV_MIME = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', avi: 'video/x-msvideo', wmv: 'video/x-ms-wmv', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', wma: 'audio/x-ms-wma', aac: 'audio/aac', ogg: 'audio/ogg' }
-async function olePreview (zip, ole, slideRels) {
-  const blip = ole.getElementsByTagNameNS('*', 'blip')[0]
+async function olePreview (zip, frame, partRels) {
+  const blip = frame.getElementsByTagNameNS('*', 'blip')[0]
   const rid = blip && (blip.getAttributeNS(R_NS, 'embed') || blip.getAttribute('r:embed'))
-  let target = rid ? slideRels[rid]?.target : null
-  const spid = ole.getAttribute('spid')
-  const vml = !target && spid ? Object.values(slideRels).find(r => /\/vmlDrawing$/.test(r.type)) : null
+  let target = rid ? partRels[rid]?.target : null
+  const spid = [...frame.getElementsByTagNameNS('*', 'oleObj')].map(o => o.getAttribute('spid')).find(Boolean)
+  const vml = !target && spid ? Object.values(partRels).find(r => /\/vmlDrawing$/.test(r.type)) : null
   if (vml) {
     const text = await zip.file(vml.target)?.async('string') || ''
     // no regex may scan past a '<' and the closing tag is one indexOf: a crafted drawing can't make them backtrack for minutes
-    const idRe = new RegExp(`\\bid="${spid.replace(/[^\w]/g, '\\$&')}"`)
+    const idRe = new RegExp(`\\b(id|o:spid)="${spid.replace(/[^\w]/g, '\\$&')}"`)
     const open = [...text.matchAll(/<v:shape\b[^<>]*>/g)].find(m => idRe.test(m[0]))
     const end = open ? text.indexOf('</v:shape>', open.index) : -1
     const relid = end > 0 && /<v:imagedata\b[^<>]*\bo:relid="([^"]+)"/.exec(text.slice(open.index + open[0].length, end))
     if (relid) target = (await rels(zip, vml.target))[relid[1]]?.target
   }
-  const f = target && zip.file(target)
-  if (!f) return null
-  return { bytes: await f.async('uint8array'), mime: PIC_MIME[target.split('.').pop().toLowerCase()] || 'image/png' }
+  // the picture loads with the others, once however many slides show the layout's object
+  return target && zip.file(target) ? { ref: target } : null
 }
 // EMF/WMF pictures: Chromium can't draw them, so Windows renders each to PNG at twice the size it is shown
 async function rasterizeMetafiles (slides) {
@@ -405,6 +440,7 @@ async function readTwin (zip) {
     if (seal([pres, ...await Promise.all(slides.map(f => f.async('string')))]) !== root.getAttribute('seal')) return null
     try {
       const data = JSON.parse(root.textContent)
+      checkDoc(data?.doc)
       for (const [id, m] of Object.entries(data.media || {})) {
         const f = zip.file(m.part)
         if (f) addMedia(await f.async('uint8array'), m.mime, id)
@@ -419,7 +455,7 @@ async function analyse (zip) {
   const pres = await readXml(zip, 'ppt/presentation.xml')
   const presRels = await rels(zip, 'ppt/presentation.xml')
   const sldIds = kids(kid(pres.documentElement, 'sldIdLst'), 'sldId')
-  const slidePaths = sldIds.map(s => presRels[s.getAttribute('r:id') || s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id')]?.target).filter(Boolean)
+  const slidePaths = sldIds.map(s => presRels[s.getAttribute('r:id') || s.getAttributeNS(R_NS, 'id')]?.target).filter(Boolean)
   const defaultTextStyle = kid(pres.documentElement, 'defaultTextStyle')
   const cache = {}
   const loadPart = async p => { if (!cache[p]) cache[p] = { xml: await readXml(zip, p), rels: await rels(zip, p) }; return cache[p] }
@@ -455,7 +491,7 @@ async function analyse (zip) {
       hideMasterOnly: off(layEl?.getAttribute('showMasterSp')),
       masterKeys: masTree ? shapeKeys(masTree) : new Set(),
       layoutKeys: lay ? shapeKeys(path(layEl, 'cSld', 'spTree')) : new Set(),
-      shapes: {}, tables: {}, charts: {}, meta: {}, oles: [], fonts: th.fonts, tableStyles: null,
+      shapes: {}, tables: {}, charts: {}, meta: {}, oles: [], masterOles: [], fonts: th.fonts, tableStyles: null,
       layoutName: path(layEl, 'cSld')?.getAttribute('name') || '',
       ownBg: !!path(sldEl, 'cSld', 'bg'),
       duotone: duotoneOf([sldEl, layEl, mas?.xml.documentElement].map(r => path(r, 'cSld', 'bg')).find(Boolean), th, scheme),
@@ -483,7 +519,7 @@ async function analyse (zip) {
             info.tables[id] = { styleId: kid(pr, 'tableStyleId')?.textContent || tableStyleDefault, firstRow: on(pr?.getAttribute('firstRow')), bandRow: on(pr?.getAttribute('bandRow')), firstCol: on(pr?.getAttribute('firstCol')), lastCol: on(pr?.getAttribute('lastCol')), lastRow: on(pr?.getAttribute('lastRow')), explicit: kids(tbl, 'tr').map(tr => kids(tr, 'tc').map(tc => !!kid(kid(tc, 'tcPr'), 'solidFill'))) }
           }
           const chartRef = c.getElementsByTagNameNS('*', 'chart')[0]
-          const rid = chartRef && (chartRef.getAttribute('r:id') || chartRef.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'))
+          const rid = chartRef && (chartRef.getAttribute('r:id') || chartRef.getAttributeNS(R_NS, 'id'))
           if (id && rid && onSlide && sl.rels[rid]) { try { info.charts[id] = await chartInfo(zip, sl.rels[rid].target, scheme) } catch (e) { console.warn('chart info', e) } }
           continue
         }
@@ -519,10 +555,17 @@ async function analyse (zip) {
         }
         const lnG = kid(kid(spPr, 'ln'), 'gradFill')
         if (lnG) { const gs = kids(path(lnG, 'gsLst'), 'gs'); if (gs.length) rec.lineColor = colorOf(gs[gs.length - 1], scheme) }
+        // an outline with its own colour and no width, which pptxtojson drops: the style's width, or 0.75 pt
+        const lnS = kid(kid(spPr, 'ln'), 'solidFill')
+        if (lnS && !kid(spPr, 'ln').hasAttribute('w')) rec.lineColor = colorOf(lnS, scheme)
         const body = kid(c, 'txBody')
         if (body) {
           const ph = phInfo(c)
           rec.ph = ph?.type || null
+          // pptxtojson knows only East Asian vertical text
+          rec.vertical = VERTICAL.get(kid(body, 'bodyPr')?.getAttribute('vert'))
+          // a slide number placeholder that shows the number: Prizma's own slide number replaces it
+          rec.num = rec.ph === 'sldNum' && [...body.getElementsByTagNameNS('*', 'fld')].some(f => f.getAttribute('type') === 'slidenum')
           const lst = kid(body, 'lstStyle')
           const layPh = ph ? findPh(laySpTree, ph) : null
           const masPh = ph ? findPh(masTree, ph) : null
@@ -566,15 +609,21 @@ async function analyse (zip) {
     }
     const tree = path(sldEl, 'cSld', 'spTree')
     if (tree) await visit(tree)
-    let at = 0
-    for (const c of tree ? tree.children : []) {
-      if (!DRAWN.has(c.localName)) continue
-      const ole = c.localName === 'graphicFrame' && c.getElementsByTagNameNS('*', 'oleObj')[0]
-      const off = ole && path(c, 'xfrm', 'off'), ext = ole && path(c, 'xfrm', 'ext')
-      const pic = off && ext && await olePreview(zip, ole, sl.rels)
-      if (pic) info.oles.push({ at, name: path(c, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('name') || 'Object', x: off.getAttribute('x') * EMU_PT, y: off.getAttribute('y') * EMU_PT, w: ext.getAttribute('cx') * EMU_PT, h: ext.getAttribute('cy') * EMU_PT, ...pic })
-      at++
+    // embedded objects on the slide, its layout and master, as their preview pictures
+    const oles = async (t, partRels, list) => {
+      let at = 0
+      for (const c of t ? t.children : []) {
+        if (!DRAWN.has(c.localName)) continue
+        const ole = c.localName === 'graphicFrame' && c.getElementsByTagNameNS('*', 'oleObj')[0]
+        const off = ole && path(c, 'xfrm', 'off'), ext = ole && path(c, 'xfrm', 'ext')
+        const pic = off && ext && await olePreview(zip, c, partRels)
+        if (pic) list.push({ at, name: path(c, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('name') || 'Object', x: off.getAttribute('x') * EMU_PT, y: off.getAttribute('y') * EMU_PT, w: ext.getAttribute('cx') * EMU_PT, h: ext.getAttribute('cy') * EMU_PT, ...pic })
+        at++
+      }
     }
+    await oles(tree, sl.rels, info.oles)
+    if (!info.hideAllMaster) await oles(laySpTree, lay?.rels, info.masterOles)
+    if (!info.hideAllMaster && !info.hideMasterOnly) await oles(masTree, mas?.rels, info.masterOles)
     info.masterShapes = {}
     if (laySpTree) await visit(laySpTree, info.masterShapes, true, false)
     if (masTree) await visit(masTree, info.masterShapes, true, false)
@@ -673,12 +722,21 @@ function lineWithRefs (e, sinfo, extra = {}) {
 const isLineShape = t => /^(line|straightConnector1|bentConnector[2-5]|curvedConnector[2-5]|lineInv)$/.test(t || '')
 
 // Custom geometry as one SVG path in the shape's own box, in points. pptxtojson keeps only the first of several
-// sub-paths, which breaks icons and freeform art. Returns null for geometry written with formulas.
+// sub-paths, which breaks icons and freeform art, and writes NaN where a point is a guide (a formula).
+// shortcut: only the guide operators and built-in names decks were seen to use (customGeo.pptx), add others as they turn up
+const GUIDE = { val: x => x, '*/': (x, y, z) => x * y / z, '+-': (x, y, z) => x + y - z, '?:': (x, y, z) => x > 0 ? y : z, abs: Math.abs, min: Math.min, pin: (x, y, z) => y < x ? x : y > z ? z : y, cos: (x, y) => x * Math.cos(y / 60000 * Math.PI / 180) }
+const BAD_PATH = /NaN|Infinity|undefined/
 function custGeomPath (spPr) {
   const list = kids(path(spPr, 'custGeom', 'pathLst'), 'path')
   const ext = path(spPr, 'xfrm', 'ext')
   if (!list.length || !ext) return null
-  const W = +ext.getAttribute('cx') * EMU_PT, H = +ext.getAttribute('cy') * EMU_PT
+  const ew = +ext.getAttribute('cx'), eh = +ext.getAttribute('cy'), W = ew * EMU_PT, H = eh * EMU_PT
+  // guides by name, in EMU, each from the ones before it; an unknown operator makes the path unusable
+  const g = new Map([['w', ew], ['h', eh], ['ss', Math.min(ew, eh)]]), num = a => g.has(a) ? g.get(a) : Number(a)
+  for (const gd of ['avLst', 'gdLst'].flatMap(k => kids(path(spPr, 'custGeom', k), 'gd'))) {
+    const [op, ...a] = (gd.getAttribute('fmla') || '').trim().split(/\s+/)
+    g.set(gd.getAttribute('name'), Object.hasOwn(GUIDE, op) ? GUIDE[op](...a.map(num)) : NaN)
+  }
   const f = v => Math.round(v * 100) / 100
   let d = ''
   for (const p of list) {
@@ -687,7 +745,7 @@ function custGeomPath (spPr) {
     const P = ([x, y]) => `${f(x * sx)} ${f(y * sy)}`
     let cx = 0, cy = 0, x0 = 0, y0 = 0
     for (const c of p.children) {
-      const pts = kids(c, 'pt').map(n => [Number(n.getAttribute('x')), Number(n.getAttribute('y'))])
+      const pts = kids(c, 'pt').map(n => [num(n.getAttribute('x')), num(n.getAttribute('y'))])
       if (pts.some(q => !Number.isFinite(q[0]) || !Number.isFinite(q[1]))) return null
       const end = pts[pts.length - 1]
       switch (c.localName) {
@@ -698,8 +756,8 @@ function custGeomPath (spPr) {
         case 'close': d += 'Z '; cx = x0; cy = y0; break
         case 'arcTo': {
           // angles are visual angles on the ellipse; turn them into parametric ones and draw ≤90° cubic pieces
-          const wR = +c.getAttribute('wR'), hR = +c.getAttribute('hR')
-          const st = +c.getAttribute('stAng') / 60000 * Math.PI / 180, sw = +c.getAttribute('swAng') / 60000 * Math.PI / 180
+          const wR = num(c.getAttribute('wR')), hR = num(c.getAttribute('hR'))
+          const st = num(c.getAttribute('stAng')) / 60000 * Math.PI / 180, sw = num(c.getAttribute('swAng')) / 60000 * Math.PI / 180
           if (![wR, hR, st, sw].every(Number.isFinite)) return null
           if (!wR || !hR || !sw) break
           const par = th => Math.atan2(wR * Math.sin(th), hR * Math.cos(th))
@@ -721,7 +779,7 @@ function custGeomPath (spPr) {
       }
     }
   }
-  return d ? { d: d.trim(), w: W, h: H } : null
+  return d && !BAD_PATH.test(d) ? { d: d.trim(), w: W, h: H } : null
 }
 
 const fallbackFor = name => /mono|consol|courier/i.test(name) ? 'monospace' : /georgia|times|garamond|cambria|constantia|serif|book antiqua|palatino|rockwell|bodoni|sitka|baskerville/i.test(name) && !/sans/i.test(name) ? 'serif' : 'sans-serif'
@@ -820,6 +878,13 @@ function fixHtml (html, shapeInfo, fixHref) {
 // presets pptxtojson draws wrong (or flat where PowerPoint shades them): Prizma draws these itself, as PowerPoint does
 const OWN_DRAWN = new Set(['halfFrame', 'bevel', 'can', 'cube', 'flowChartMultidocument', 'flowChartMagneticDisk', 'flowChartMagneticDrum', 'flowChartDisplay', 'wedgeEllipseCallout',
   'parallelogram', 'plus', 'rightArrow', 'leftArrow', 'upArrow', 'downArrow', 'leftRightArrow', 'upDownArrow', 'star4', 'noSmoking', 'sun', 'cloud', 'cloudCallout'])
+// An element mirrored across its group's box, as actions.js flipEl flips a group's children
+function mirror (c, axis, g) {
+  if (axis === 'h') c.x = g.w - c.x - c.w; else c.y = g.h - c.y - c.h
+  if (c.rot) c.rot = 360 - c.rot
+  if (c.type !== 'group') { if (axis === 'h') c.flipH = !c.flipH; else c.flipV = !c.flipV; return }
+  for (const k of c.children) mirror(k, axis, c)
+}
 function convert (e, ctx) {
   let el
   try { el = convertEl(e, ctx) } catch (err) { console.warn('left out an object Prizma could not read', e?.type, err); return null } // one odd object must not stop the file from opening
@@ -830,11 +895,13 @@ function convert (e, ctx) {
 function convertEl (e, ctx) {
   const sinfo = e.id ? (ctx.keyed ? ctx.info.shapes[e.id + '|' + e.name] : ctx.info.shapes[e.id]) : null
   const meta = e.id ? ctx.info.meta?.[e.id] : null
-  // objects paired for Morph ("!!" names) share one id across slides, as they do in Prizma
-  let id = uid(), name = e.name || meta?.name
+  // objects paired for Morph ("!!" names) share one id across slides, as they do in Prizma; a second object of the
+  // same name on one slide keeps an id of its own
+  let id = uid(), name = meta?.name || e.name
   if (ctx.morph && /^!!/.test(name || '')) {
-    id = ctx.morph.get(name) || id
-    ctx.morph.set(name, id)
+    if (!ctx.morph.has(name)) ctx.morph.set(name, id)
+    else if (!ctx.morphUsed.has(ctx.morph.get(name))) id = ctx.morph.get(name)
+    ctx.morphUsed.add(id)
     name = name.replace(/^!!/, '').replace(/ [0-9a-z]{1,4}$/, '')
   }
   const base = { id, x: e.left || 0, y: e.top || 0, w: e.width || 0, h: e.height || 0, rot: e.rotate || 0, ...(e.isFlipH ? { flipH: true } : {}), ...(e.isFlipV ? { flipV: true } : {}), name, ...(meta?.descr ? { alt: meta.descr } : {}), ...(meta?.hidden ? { hidden: true } : {}) }
@@ -849,7 +916,7 @@ function convertEl (e, ctx) {
         vAlign: va(e.vAlign), wrap: e.wrap !== false, autofit: e.autoFit?.type === 'shape' ? 'shape' : e.autoFit?.type === 'text' ? 'shrink' : 'none',
         // pptxtojson gives the shrink as a percentage (62.5), Prizma keeps a fraction
         ...(e.autoFit?.fontScale > 0 && e.autoFit.fontScale < 100 ? { fontScale: e.autoFit.fontScale / 100 } : {}),
-        ...(e.isVertical ? { vertical: true } : {}), ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
+        ...(sinfo?.vertical || e.isVertical ? { vertical: sinfo?.vertical || true } : {}), ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
       }
       if (sinfo?.ph && PH_ROLE[sinfo.ph]) el.ph = PH_ROLE[sinfo.ph]
       return el
@@ -869,11 +936,11 @@ function convertEl (e, ctx) {
       // the file's adjustments, where Prizma's own drawing of that preset has the same handle
       const adj = Object.fromEntries(Object.entries(adjFromAvLst(e.shapType, e.keypoints)).filter(([k, v]) => SHAPES[e.shapType]?.adj?.[k] !== undefined && Number.isFinite(v)))
       const el = {
-        ...base, type: 'shape', shape: e.shapType || 'rect', adj, path: g ? g.d : own ? null : e.path || null,
+        ...base, type: 'shape', shape: e.shapType || 'rect', adj, path: g ? g.d : own || BAD_PATH.test(e.path) ? null : e.path || null,
         pathVB: g ? { w: g.w, h: g.h } : own ? null : e.pathViewBox ? { w: e.pathViewBox.width, h: e.pathViewBox.height } : null,
         fill: e.strokeOnly || sinfo?.bgFill || sinfo?.noFill ? null : convFill(e.fill, ctx.media), line: lineWithRefs(e, sinfo), html: fixHtml(e.content, sinfo, fixLinks),
         inset: e.textInset ? { l: e.textInset.l, t: e.textInset.t, r: e.textInset.r, b: e.textInset.b } : { ...DEFAULT_INSET },
-        vAlign: va(e.vAlign), wrap: e.wrap !== false, ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
+        vAlign: va(e.vAlign), wrap: e.wrap !== false, ...(sinfo?.vertical ? { vertical: sinfo.vertical } : {}), ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
       }
       // "filled with the slide background": see-through here, the background shows anyway
       if (sinfo?.bgFill) el.bgFill = true
@@ -946,25 +1013,29 @@ function convertEl (e, ctx) {
       }
     }
     case 'chart': {
+      const cx = e.id ? ctx.info.charts?.[e.id] : null
+      // the data chartInfo read from the chart part; pptxtojson's stays for the charts it does not read (layouts, masters)
+      const g = cx?.chartType ? cx : e
       const data = Array.isArray(e.data) ? e.data : []
       const first = data[0]
       // scatter and bubble charts arrive as plain lists: [x values, y values of series 1, of series 2, …]
       const xy = Array.isArray(first)
-      const cats = xy ? first.map(String) : first?.xlabels ? Object.keys(first.xlabels).sort((a, b) => +a - +b).map(k => first.xlabels[k]) : (first?.values || []).map(v => String(v.x))
-      const T = e.chartType || ''
-      const type = /bar/i.test(T) ? (e.barDir === 'bar' ? 'bar' : 'column') : /line/i.test(T) ? 'line' : /area/i.test(T) ? 'area' : /doughnut/i.test(T) ? 'doughnut' : /pie/i.test(T) ? 'pie' : /scatter|bubble/i.test(T) ? 'scatter' : /radar/i.test(T) ? 'radar' : 'column'
-      const series = xy
+      const cats = g.categories || (xy ? first.map(String) : first?.xlabels ? Object.keys(first.xlabels).sort((a, b) => +a - +b).map(k => unent(first.xlabels[k])) : (first?.values || []).map(v => String(v.x)))
+      const T = g.chartType || ''
+      const type = /bar/i.test(T) ? (g.barDir === 'bar' ? 'bar' : 'column') : /line/i.test(T) ? 'line' : /area/i.test(T) ? 'area' : /doughnut/i.test(T) ? 'doughnut' : /pie/i.test(T) ? 'pie' : /scatter|bubble/i.test(T) ? 'scatter' : /radar/i.test(T) ? 'radar' : 'column'
+      const series = g.series || (xy
         ? data.slice(1).map((ys, i) => ({ name: 'Series ' + (i + 1), values: ys.map(v => +v || 0) }))
-        : data.map(s => ({ name: s.key ?? 'Series', values: (s.values || []).map(v => +v.y || 0) }))
-      const cx = e.id ? ctx.info.charts?.[e.id] : null
+        : data.map(s => ({ name: unent(s.key) ?? 'Series', values: (s.values || []).map(v => +v.y || 0) })))
+      // a save writes one point per category: pptxtojson can leave a chart with values and fewer categories, or none
+      for (let n = Math.max(0, ...series.map(s => s.values.length)); cats.length < n;) cats.push(String(cats.length + 1))
       let colors = (e.colors || []).filter(Boolean)
       if (cx?.seriesColors?.some(Boolean)) colors = cx.seriesColors.map((c, i) => c || colors[i]).filter(Boolean)
       return {
-        ...base, type: 'chart', chartType: type, look: cx?.is3d ? '3d' : 'flat', grouping: /percent/i.test(e.grouping || '') ? 'percent' : /stacked/i.test(e.grouping || '') ? 'stacked' : 'clustered',
+        ...base, type: 'chart', chartType: type, look: cx?.is3d ? '3d' : 'flat', grouping: /percent/i.test(g.grouping || '') ? 'percent' : /stacked/i.test(g.grouping || '') ? 'stacked' : 'clustered',
         categories: cats, series: series.map((s, i) => colors[i] && type !== 'pie' && type !== 'doughnut' ? { ...s, color: colors[i].slice(0, 7) } : s),
         ...(type === 'pie' || type === 'doughnut' ? (cx?.pointColors?.length ? { pointColors: cats.map((_, i) => cx.pointColors.find(p => p.idx === i)?.color || null) } : {}) : {}),
         ...(cx?.reversed ? { reversed: true } : {}),
-        opts: { legend: cx ? ({ r: 'right', l: 'right', t: 'top', b: 'bottom', tr: 'right' })[cx.legend] || 'none' : 'bottom', labels: !!cx?.labels, title: cx?.title || '', gridlines: cx?.gridlines ?? true, holeSize: e.holeSize || 55 },
+        opts: { legend: cx ? ({ r: 'right', l: 'right', t: 'top', b: 'bottom', tr: 'right' })[cx.legend] || 'none' : 'bottom', labels: !!cx?.labels, title: cx?.title || '', gridlines: cx?.gridlines ?? true, holeSize: g.holeSize || 55 },
         ts: { font: '+minor', size: cx?.fontSize || 13, color: 'dk1' }
       }
     }
@@ -978,7 +1049,10 @@ function convertEl (e, ctx) {
     case 'group': case 'diagram': {
       const children = (e.elements || []).map(c => convert(c, ctx)).filter(Boolean)
       if (!children.length) return null
-      return { ...base, type: 'group', children }
+      // Prizma's groups carry no flip: a flipped group's children are mirrored instead and the group keeps its turn
+      const { flipH, flipV, ...g } = base
+      for (const c of children) { if (flipH) mirror(c, 'h', g); if (flipV) mirror(c, 'v', g) }
+      return { ...g, type: 'group', children }
     }
     default:
       return null
@@ -997,7 +1071,7 @@ async function readProps (zip) {
   return { title: get('title'), author: get('creator'), created: Date.parse(get('created')) || Date.now(), modified: Date.now() }
 }
 async function readShowProps (zip, nSlides) {
-  const show = { loop: false, presenter: true, useTimings: true, display: 'auto' }
+  const show = { loop: false, useTimings: true, display: 'auto' }
   const x = await readXml(zip, 'ppt/presProps.xml')
   const sp = x && kid(x.documentElement, 'showPr')
   if (!sp) return show
@@ -1014,9 +1088,7 @@ async function readShowProps (zip, nSlides) {
 export async function importPptx (buffer, onProgress) {
   onProgress?.('Reading file')
   const zip = await JSZip.loadAsync(buffer)
-  // a few MB can unpack to gigabytes and take the window down
-  // shortcut: trusts the sizes the zip declares (JSZip keeps them on _data); count bytes while unpacking if lying zips turn up
-  if (Object.values(zip.files).reduce((n, f) => n + (f._data?.uncompressedSize || 0), 0) > 1.5 * 1024 ** 3) throw new Error(`This file unpacks to more than 1.5 GB, so Prizma won't open it.`)
+  checkZipSize(zip)
   const twin = await readTwin(zip)
   if (twin) return pinSlideLinks(twin, sanitize)
   const info = await analyse(zip)
@@ -1024,11 +1096,14 @@ export async function importPptx (buffer, onProgress) {
   onProgress?.('Converting slides')
   // no media from pptxtojson: it throws on linked files and drops m4a/mov/wmv; convertEl reads them from the package
   const json = await pptxParse(buffer, { imageMode: 'none', videoMode: 'none', audioMode: 'none', singleLineSpacingFactor: 1.2 })
+  // names are matched with the ones read from the XML, which have their entities decoded
+  const names = l => { for (const e of l || []) { e.name = unent(e.name); names(e.elements) } }
+  for (const s of json.slides) { names(s.elements); names(s.layoutElements) }
   // pptxtojson takes slides by part name ([Content_Types].xml, sorted by number); the deck's order is sldIdLst's
   const parsed = kids((await readXml(zip, '[Content_Types].xml'))?.documentElement, 'Override')
     .filter(o => o.getAttribute('ContentType') === 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml')
     .map(o => o.getAttribute('PartName').slice(1)).sort((a, b) => /(\d+)\.xml/.exec(a)[1] - /(\d+)\.xml/.exec(b)[1])
-  const media = await loadPictures(json.slides, zip)
+  const media = await loadPictures([json.slides, info.slides.map(s => [s.oles, s.masterOles])], zip)
   const pending = []
   const accents = json.themeColors || []
   const tc = info.theme?.colors || {}
@@ -1047,14 +1122,17 @@ export async function importPptx (buffer, onProgress) {
     if (!href) return null
     const m = /(?:^|\/)(slide\d+\.xml)$/.exec(href)
     if (m) { const k = slideNames.indexOf(m[1]); return k >= 0 ? '#slide:' + k : null }
-    return /^(https?:|mailto:|ftp:|file:|#)/i.test(href) ? href : null
+    // web, mail and files (file:, C:\…, \\server\…, a path next to the deck); no other scheme (javascript:, data:…)
+    const t = href.replace(/[\0-\x20\x7f]/g, '')
+    return /^(https?:|mailto:|ftp:|file:|#|[a-z]:[\\/]|\\\\)/i.test(t) || !/^[a-z][a-z\d+.-]*:/i.test(t) ? href : null
   }
   const morph = new Map(), tinted = new Map()
+  let slideNumbers = false
   // a slide part left out of sldIdLst is not a slide; one pptxtojson could not read comes out empty
   const slides = info.slides.map((sinfo, i) => {
     const s = json.slides[parsed.indexOf(info.slidePaths[i])] || {}
     const ids = new Map()
-    const ctx = { info: sinfo, media, pending, ids, morph, fixHref, zip }
+    const ctx = { info: sinfo, media, pending, ids, morph, morphUsed: new Set(), fixHref, zip }
     const byOrder = arr => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     let elements = byOrder(s.elements).map(e => convert(e, ctx)).filter(Boolean)
     const has = (set, e) => e.name !== undefined ? set.has(e.id + '|' + e.name) : [...set].some(k => k.startsWith(e.id + '|'))
@@ -1065,7 +1143,9 @@ export async function importPptx (buffer, onProgress) {
     }
     const mctx = { info: { shapes: sinfo.masterShapes || {}, tables: {} }, keyed: true, media, pending, fixHref, zip }
     let master = byOrder(s.layoutElements).filter(keep).map(e => convert(e, mctx)).filter(Boolean)
-    for (const o of sinfo.oles || []) elements.splice(Math.min(o.at, elements.length), 0, { id: uid(), type: 'image', name: o.name, x: o.x, y: o.y, w: o.w, h: o.h, rot: 0, src: addMedia(o.bytes, o.mime), crop: null, line: null })
+    const ole = (list, o) => list.splice(Math.min(o.at, list.length), 0, { id: uid(), type: 'image', name: o.name, x: o.x, y: o.y, w: o.w, h: o.h, rot: 0, src: media.get(o.ref), crop: null, line: null })
+    for (const o of sinfo.oles || []) ole(elements, o)
+    for (const o of sinfo.masterOles || []) ole(master, o)
     const timing = sinfo.sld ? readTiming(sinfo.sld, spid => ids.get(String(spid)) || null) : { animations: [], autoplay: [], loop: [] }
     for (const id of timing.autoplay) { const el = elements.find(e => e.id === id); if (el) el.autoplay = true }
     for (const id of timing.loop) { const el = elements.find(e => e.id === id); if (el) el.loop = true }
@@ -1077,6 +1157,9 @@ export async function importPptx (buffer, onProgress) {
       const fill = bg = { ...bg }
       pending.push(tinted.get(key).then(src => { fill.src = src }))
     }
+    // a slide number placeholder showing the number becomes the deck's slide number, as in decks Prizma wrote
+    const nums = new Set(Object.entries(sinfo.shapes).filter(([, r]) => r.num).map(([sid]) => ids.get(sid)).filter(Boolean))
+    if (nums.size) { elements = elements.filter(e => !nums.has(e.id)); slideNumbers = true }
     if (spec) {
       // footers come back as settings; untouched Prizma layouts redraw their own art and background
       const hfIds = new Set(Object.entries(sinfo.shapes).filter(([, r]) => HF_PH.has(r.ph)).map(([sid]) => ids.get(sid)).filter(Boolean))
@@ -1102,8 +1185,7 @@ export async function importPptx (buffer, onProgress) {
     slides: slides.length ? slides : [{ id: uid('s'), layout: 'blank', bg: null, master: [], elements: [], notes: '', hidden: false, transition: null, animations: [], comments: [] }],
     props: await readProps(zip),
     show: spec && marker.show ? marker.show : await readShowProps(zip, slides.length),
-    hf: spec && marker.hf ? marker.hf : { number: false, footer: '', date: false, dateText: '', hideOnTitle: true },
+    hf: spec && marker.hf ? marker.hf : { number: slideNumbers, footer: '', date: false, dateText: '', hideOnTitle: true },
     imported: !spec
   })
 }
-export { htmlFromText }

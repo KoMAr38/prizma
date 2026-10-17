@@ -286,9 +286,10 @@ export function removeEls (s, ids) {
 }
 // Links to a slide name the slide (its id), so they follow it when slides move.
 // mapSlideLinks sends every slide link (on objects and inside text) through `to`; no answer drops an object's link.
-// `clean` runs over every piece of text html on the way (file readers pass sanitize).
+// `clean` runs over every piece of text html on the way (file readers pass sanitize), after the ids went in: a slide
+// id from a file is untrusted text too.
 export function mapSlideLinks (slides, to, clean = h => h) {
-  const re = h => clean(h).replace(/href="#slide:([^"]+)"/g, (m, t) => { const v = to(t); return v ? `href="#slide:${v}"` : m })
+  const re = h => clean(h.replace(/href="#slide:([^"]+)"/g, (m, t) => { const v = to(t); return v ? `href="#slide:${v}"` : m }))
   for (const s of slides) {
     walk([...s.elements, ...(s.master || [])], e => {
       if (e.link?.slide !== undefined) { const v = to(e.link.slide); if (v) e.link = { slide: v }; else delete e.link }
