@@ -1,14 +1,13 @@
 // Document operations used by the ribbon, menus, keyboard shortcuts and panes.
 import { batch } from '@preact/signals'
-import { current } from 'immer'
 import {
   doc, slide, slideIdx, selection, editing, editCell, slideSel, update, updateSlide, updateEls, select, goSlide,
-  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, tool, pane, formatTab, painter, settings, appInfo, theme as themeSig
+  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, painter, settings, appInfo, theme as themeSig
 } from './store.js'
 import {
-  uid, findEl, walk, parentGroups, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, hexColor, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
+  uid, findEl, walk, parentGroups, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
 } from './model.js'
-import { newSlide, layoutPlaceholders, makeDocTheme, themeById, layoutKind, THEMES } from './themes.js'
+import { newSlide, layoutPlaceholders, makeDocTheme, themeById, THEMES } from './themes.js'
 import { setRunStyleAll, setParaStyleAll, setBulletsAll, changeLevelAll, normalize, richState, isEmptyHtml, htmlFromText, textOf, replaceText, searchRe } from './html.js'
 import { SHAPES } from './shapes.js'
 
@@ -796,6 +795,3 @@ export function applyFormat (id) {
   })
   painter.value = null
 }
-
-// ---------------- helpers for the UI ----------------
-export { hexColor, current }

@@ -3,7 +3,7 @@ import { memo } from 'preact/compat'
 import { doc, slide, selection, selected, tool, pane, formatTab, theme as themeSig, lastColors, settings, oneStep } from '../../core/store.js'
 import { SHAPES, SHAPE_CATS, LINE_KINDS, shapeParts } from '../../core/shapes.js'
 import { LAYOUTS, newSlide, slideDecor } from '../../core/themes.js'
-import { hexColor, solid, DASHES, DASH_LABEL, unionBounds, bounds } from '../../core/model.js'
+import { hexColor, solid, DASHES, DASH_LABEL, unionBounds } from '../../core/model.js'
 import * as A from '../../core/actions.js'
 import { Btn, Drop, Split, ColorBtn, ColorPicker, Gallery, PickGrid, NumField, unitFmt, unitParse, addRecentColor } from '../controls.jsx'
 import { Menu, closePop } from '../popover.jsx'
@@ -39,7 +39,7 @@ export function shapeItems () {
   const items = [{ header: 'Lines' }, ...LINE_KINDS.map(l => ({ key: 'line:' + l.kind, label: l.label, line: l.kind }))]
   for (const cat of SHAPE_CATS) {
     items.push({ header: cat })
-    for (const [id, def] of Object.entries(SHAPES)) if (def.cat === cat && !def.hidden) items.push({ key: id, label: def.label, shape: id })
+    for (const [id, def] of Object.entries(SHAPES)) if (def.cat === cat) items.push({ key: id, label: def.label, shape: id })
   }
   return items
 }
@@ -129,7 +129,6 @@ export function QuickStylesGallery ({ visible = 7 }) {
 }
 
 // ---------- fill / outline / effects ----------
-const firstFill = () => selected.value.find(e => e.fill)?.fill
 const firstLine = () => selected.value.find(e => e.line)?.line
 export function FillBtn () {
   const v = lastColors.value.fill
@@ -239,4 +238,4 @@ export function SizeFields () {
 }
 export const unitStep = () => (settings.value.units || 'cm') === 'in' ? 7.2 : (settings.value.units || 'cm') === 'pt' ? 1 : 72 / 2.54 * 0.1
 export function openFormat (tab) { pane.value = 'format'; if (tab) formatTab.value = tab }
-export { Btn, Drop, Split, ColorBtn, Gallery, PickGrid, Icon, Menu, closePop, runCmd, cmdEnabled, A }
+export { Btn, Drop, Split, ColorBtn, Icon, closePop, runCmd, cmdEnabled, A }

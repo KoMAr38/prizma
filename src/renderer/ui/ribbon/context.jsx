@@ -92,7 +92,7 @@ export const PIC_STYLES = [
   { label: 'Thick accent frame', line: { color: 'accent1', width: 8 } },
   { label: 'Center shadow', shadow: { dx: 0, dy: 0, blur: 16, alpha: 0.6 } },
   { label: 'Hexagon', geom: 'hexagon' },
-  { label: 'Plain', reset: true }
+  { label: 'Plain' }
 ]
 const applyPicStyle = st => {
   const ids = selected.value.filter(e => e.type === 'image').map(e => e.id)
@@ -172,7 +172,7 @@ function TablePreview ({ st }) {
   const fake = { rows: [1, 1, 1, 1], cols: [1, 1, 1], style: st }
   return (
     <span class="tbl-prev">
-      {[0, 1, 2, 3].map(r => <span key={r}>{[0, 1, 2].map(c => { const l = tableCellLook(fake, r, c); return <i key={c} style={{ background: l.fill ? hexColor(l.fill.includes('@') ? l.fill : l.fill, themeSig.value) : 'transparent', borderBottom: l.borders?.bottom ? `1px solid ${hexColor(l.borders.bottom.color, themeSig.value)}` : 'none' }} /> })}</span>)}
+      {[0, 1, 2, 3].map(r => <span key={r}>{[0, 1, 2].map(c => { const l = tableCellLook(fake, r, c); return <i key={c} style={{ background: l.fill ? hexColor(l.fill, themeSig.value) : 'transparent', borderBottom: l.borders?.bottom ? `1px solid ${hexColor(l.borders.bottom.color, themeSig.value)}` : 'none' }} /> })}</span>)}
     </span>
   )
 }

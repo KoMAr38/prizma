@@ -280,7 +280,7 @@ def('design.bg', { label: 'Format background', icon: 'paint-bucket', run: () => 
 // ---------------- slide show ----------------
 def('show.start', { label: 'From beginning', icon: 'play', keys: 'F5', tags: 'slide show play present start', run: () => import('../show/launch.js').then(m => m.startShow(firstShown())), global: true })
 def('show.current', { label: 'From current slide', icon: 'presentation', keys: 'Shift+F5', run: () => import('../show/launch.js').then(m => m.startShow(slideIdx.value)), global: true })
-def('show.presenter', { label: 'Presenter view', icon: 'monitor-speaker', keys: 'Alt+F5', run: () => import('../show/launch.js').then(m => m.startShow(slideIdx.value, { presenter: true, force: true })), global: true })
+def('show.presenter', { label: 'Presenter view', icon: 'monitor-speaker', keys: 'Alt+F5', run: () => import('../show/launch.js').then(m => m.startShow(slideIdx.value, { presenter: true })), global: true })
 def('show.transitions', { label: 'Transitions', icon: 'sparkles', tags: 'slide transition morph fade', run: () => { ribbonTab.value = 'transitions' } })
 def('show.rehearse', { label: 'Rehearse timings', icon: 'timer', tags: 'practice stopwatch timer', run: () => import('../show/launch.js').then(m => m.startShow(firstShown(), { rehearse: true })) })
 // From beginning starts at the first slide that isn't hidden, as in PowerPoint
@@ -321,14 +321,13 @@ export function comboOf (e) {
   return (e.ctrlKey || e.metaKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + keyName(e)
 }
 const KEYMAP = new Map()
-const norm = k => k.replace(/Ctrl\+Alt\+Shift|Ctrl\+Shift\+Alt/, 'Ctrl+Alt+Shift')
 export function buildKeymap () {
   KEYMAP.clear()
   for (const c of Object.values(CMDS)) for (const k of [c.keys, ...(c.alt || [])].filter(Boolean)) {
     // combos are stored as Ctrl+Alt+Shift+Key, whatever order the command lists them in
     const parts = k.split('+'); const key = parts.pop()
     const kk = (parts.includes('Ctrl') ? 'Ctrl+' : '') + (parts.includes('Alt') ? 'Alt+' : '') + (parts.includes('Shift') ? 'Shift+' : '') + (key.length === 1 ? key.toUpperCase() : key)
-    KEYMAP.set(norm(kk), c.id)
+    KEYMAP.set(kk, c.id)
   }
 }
 export const commandForKey = e => KEYMAP.get(comboOf(e)) || null

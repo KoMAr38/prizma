@@ -7,7 +7,7 @@ import {
   focusArea, editorReq, ribbonTab, select, update, updateEl, updateEls, toast, selected, finishEditing, openDialog, settings, showRuler
 } from '../core/store.js'
 import { Rulers } from './Rulers.jsx'
-import { PX, findEl, walk, parentFrame, parentGroups, refitGroup, onSlide, bounds, unionBounds, rotatePt, lineEnds, boxFromPoints, round2, screenCrop } from '../core/model.js'
+import { PX, findEl, walk, cloneEl, parentFrame, parentGroups, refitGroup, onSlide, bounds, unionBounds, rotatePt, lineEnds, boxFromPoints, round2, screenCrop } from '../core/model.js'
 import { SlideView } from '../render/SlideView.jsx'
 import { TextEditor, CellEditor } from './TextEditor.jsx'
 import * as A from '../core/actions.js'
@@ -221,7 +221,7 @@ export function Stage () {
     if (!els.length) return
     finishEditing()
     if (h === 'rot') {
-      const ub = els.length === 1 ? els[0].abs : unionBounds(els.map(x => x.abs))
+      const ub = els[0].abs // the rotate handle shows for one object only
       const c = { x: ub.x + ub.w / 2, y: ub.y + ub.h / 2 }
       drag.current = { mode: 'rotate', els, c, a0: Math.atan2(p.y - c.y, p.x - c.x) }
       capture(e); return
@@ -293,13 +293,7 @@ export function Stage () {
       for (const x of g.els) {
         let r = (x.el.rot || 0) + da
         if (e.shiftKey) r = Math.round(r / 15) * 15
-        const dr = r - (x.el.rot || 0)
-        let pos = { x: x.el.x, y: x.el.y }
-        if (g.els.length > 1) {
-          const nc = x.f.fromSlide(rotatePt({ x: x.abs.x + x.abs.w / 2, y: x.abs.y + x.abs.h / 2 }, g.c, dr))
-          pos = { x: nc.x - x.el.w / 2, y: nc.y - x.el.h / 2 }
-        }
-        map[x.id] = { ...pos, rot: ((r % 360) + 360) % 360 }
+        map[x.id] = { rot: ((r % 360) + 360) % 360 }
       }
       g.map = map
       live.value = map
@@ -309,12 +303,8 @@ export function Stage () {
       const ends = [...g.ends]
       let q = p
       const other = ends[1 - g.end]
-      if (e.shiftKey) {
-        const ang = Math.atan2(q.y - other.y, q.x - other.x)
-        const sa = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4)
-        const len = Math.hypot(q.x - other.x, q.y - other.y)
-        q = { x: other.x + Math.cos(sa) * len, y: other.y + Math.sin(sa) * len }
-      } else if (!e.altKey) {
+      if (e.shiftKey) q = snap45(other, q)
+      else if (!e.altKey) {
         // snap the end to other objects' connection points (edges' midpoints and corners)
         const th = 8 / k
         for (const o of s.elements) {
@@ -465,9 +455,8 @@ export function Stage () {
             for (const id of g.ids) {
               const h = findEl(sl, id)
               if (!h) continue
-              const c = JSON.parse(JSON.stringify(h.el))
-              const fresh = x => { x.id = Math.random().toString(36).slice(2, 10); (x.children || []).forEach(fresh) }
-              fresh(c); c.x = map[id].x; c.y = map[id].y
+              const c = cloneEl(h.el)
+              c.x = map[id].x; c.y = map[id].y
               h.list.splice(h.index + 1, 0, c)
               copies.push(c.id)
             }
@@ -480,7 +469,7 @@ export function Stage () {
       // click without dragging
       const el = g.el
       if (!el || e.shiftKey || e.ctrlKey) return
-      if (el.type === 'text' && !el.locked && !(el.ph === 'pic' && !el.html?.replace(/<[^>]+>/g, '').trim())) { startEdit(el.id, g.client) ; return }
+      if (el.type === 'text' && !(el.ph === 'pic' && !el.html?.replace(/<[^>]+>/g, '').trim())) { startEdit(el.id, g.client) ; return }
       if (el.ph === 'pic') { runCmd('ins.picture'); return }
       if (el.type === 'shape' && g.wasSelected) { startEdit(el.id, g.client); return }
       if (el.type === 'table') {
@@ -540,10 +529,8 @@ export function Stage () {
       if (e.shiftKey) { const m = Math.max(box.w, box.h); box = { x: b.x < a.x ? a.x - m : a.x, y: b.y < a.y ? a.y - m : a.y, w: m, h: m } }
     }
     if (g.kind === 'text') {
-      if (!box) {
-        const el = A.insertTextBox({ x: a.x - 4, y: a.y - 14, w: 40, h: 30 })
-        A.setProps({ wrap: false }, [el.id])
-      } else A.insertTextBox({ ...box, h: Math.max(30, box.h) })
+      if (!box) A.insertTextBox({ x: a.x - 4, y: a.y - 14, w: 40, h: 30 }) // this narrow, it grows with its text instead of wrapping
+      else A.insertTextBox({ ...box, h: Math.max(30, box.h) })
       editorReq.value = { mode: 'end' }
       return
     }
@@ -749,7 +736,7 @@ function Overlay ({ s, k, W, H, sel, selEls, marq, ink, preview }) {
     }
     const isCrop = crop === el.id
     const editingThis = editingId === el.id
-    const showHandles = !isCrop && !el.locked
+    const showHandles = !isCrop
     // group outline when a child is selected
     const top = s.elements.find(t => t.type === 'group' && t.id !== el.id && findEl({ elements: [t] }, el.id))
     if (top) parts.push(<div key={el.id + 'g'} class="sel-group" style={{ left: top.x * k + 'px', top: top.y * k + 'px', width: top.w * k + 'px', height: top.h * k + 'px', transform: top.rot ? `rotate(${top.rot}deg)` : undefined }} />)
