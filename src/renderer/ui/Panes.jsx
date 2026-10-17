@@ -12,7 +12,7 @@ import { contextMenu } from './popover.jsx'
 import { animById, ANIM_KIND, DIR_LABEL } from '../show/effects.js'
 import { unitStep } from './ribbon/common.jsx'
 import { previewReq } from './ribbon/design.jsx'
-import { textRun, refitSoon } from '../app/commands.js'
+import { textRun, refitSoon, pickPicture } from '../app/commands.js'
 
 function PaneHead ({ title, children }) {
   return (
@@ -56,12 +56,8 @@ export function FillEditor ({ fill, onChange, picture = true, pattern = true, no
     else if (ty === 'pattern') onChange({ type: 'pattern', preset: 'smGrid', fg: 'dk1', bg: 'lt1' })
   }
   const pickImage = async () => {
-    const p = await window.prizmaNative.openDialog({ title: 'Insert picture', filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] }] })
-    if (!p?.[0]) return
-    const bytes = await window.prizmaNative.readFile(p[0])
-    const ext = p[0].split('.').pop().toLowerCase()
-    const src = addMedia(bytes, ext === 'png' ? 'image/png' : ext === 'svg' ? 'image/svg+xml' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg')
-    onChange({ type: 'image', src, mode: 'cover' })
+    const pic = await pickPicture('Insert picture')
+    if (pic) onChange({ type: 'image', src: addMedia(pic.bytes, pic.mime), mode: 'cover' })
   }
   const stops = fill?.stops || []
   const si = Math.min(stopI, stops.length - 1)

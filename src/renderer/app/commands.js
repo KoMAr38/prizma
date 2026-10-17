@@ -203,16 +203,27 @@ const openDrop = (tab, tip) => { ribbonTab.value = tab; setTimeout(() => documen
 def('ins.shapes', { label: 'Shapes', icon: 'shapes', tags: 'rectangle circle arrow star', run: () => openDrop('insert', 'Insert shapes') })
 def('ins.wordart', { label: 'WordArt', icon: 'pilcrow', tags: 'fancy text effects', run: () => openDrop('insert', 'WordArt') })
 def('ins.comment', { label: 'New comment', icon: 'message-square-plus', keys: 'Ctrl+Alt+M', run: () => { pane.value = 'comments'; setTimeout(() => document.querySelector('.cm-new textarea')?.focus(), 60) } })
+const PICTURES = { name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'] }
 export async function pickPictures () {
-  const paths = await native.openDialog({ title: 'Insert picture', multi: true, filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'] }, { name: 'All files', extensions: ['*'] }] })
+  const paths = await native.openDialog({ title: 'Insert picture', multi: true, filters: [PICTURES, { name: 'All files', extensions: ['*'] }] })
   for (const p of paths || []) await insertPictureFile(p)
+}
+// A picture file as the slide shows it (a big photo made smaller); null, after telling the user, when it can't be shown
+export async function readPicture (p) {
+  const pic = await A.loadPicture(await native.readFile(p), mimeOf(p))
+  if (!pic) A.cantShowPicture(p.split(/[\\/]/).pop())
+  return pic
+}
+// The picture chosen in an open dialog, read as readPicture does; null when none
+export async function pickPicture (title) {
+  const paths = await native.openDialog({ title, filters: [PICTURES] })
+  return paths?.[0] ? readPicture(paths[0]) : null
 }
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', avif: 'image/avif', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/mp4', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac' }
 export const mimeOf = p => MIME[F.extOf(p)] || 'application/octet-stream'
 export async function insertPictureFile (p, box) {
-  const pic = await A.loadPicture(await native.readFile(p), mimeOf(p))
-  if (!pic) return A.cantShowPicture(p.split(/[\\/]/).pop())
-  return A.insertImageBytes(pic.bytes, pic.mime, pic.w, pic.h, box)
+  const pic = await readPicture(p)
+  return pic && A.insertImageBytes(pic.bytes, pic.mime, pic.w, pic.h, box)
 }
 async function pickMedia (kind) {
   const paths = await native.openDialog({ title: kind === 'video' ? 'Insert video' : 'Insert audio', filters: [kind === 'video' ? { name: 'Video', extensions: ['mp4', 'm4v', 'webm', 'mov'] } : { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac'] }] })

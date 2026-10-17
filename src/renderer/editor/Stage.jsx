@@ -13,10 +13,10 @@ import { TextEditor, CellEditor } from './TextEditor.jsx'
 import * as A from '../core/actions.js'
 import { contextMenu } from '../ui/popover.jsx'
 import { Icon } from '../ui/Icon.jsx'
-import { mimeOf, runCmd, cmdEnabled } from '../app/commands.js'
+import { mimeOf, runCmd, cmdEnabled, pickPicture } from '../app/commands.js'
 import { openPath, extOf, OPEN_EXT } from '../app/files.js'
 import { LAYOUTS } from '../core/themes.js'
-import { mediaUrl } from '../core/store.js'
+import { mediaUrl, addMedia } from '../core/store.js'
 import { caretAt } from './TextEditor.jsx'
 
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
@@ -712,11 +712,8 @@ function smoothPath (pts) {
   return d + ` L${l.x.toFixed(2)} ${l.y.toFixed(2)}`
 }
 export async function changePicture (id) {
-  const paths = await window.prizmaNative.openDialog({ title: 'Change picture', filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp'] }] })
-  if (!paths?.[0]) return
-  const pic = await A.loadPicture(await window.prizmaNative.readFile(paths[0]), mimeOf(paths[0]))
-  if (!pic) return A.cantShowPicture(paths[0].split(/[\\/]/).pop())
-  const { addMedia } = await import('../core/store.js')
+  const pic = await pickPicture('Change picture')
+  if (!pic) return
   const src = addMedia(pic.bytes, pic.mime)
   updateEl(id, e => { e.src = src; e.crop = null; e.natW = pic.w; e.natH = pic.h; const ar = pic.w / pic.h; const nh = e.w / ar; e.y += (e.h - nh) / 2; e.h = nh })
 }

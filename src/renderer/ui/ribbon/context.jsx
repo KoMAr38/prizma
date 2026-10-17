@@ -1,6 +1,7 @@
 // Contextual tabs: Shape Format, Picture Format, Table Design, Table Layout, Chart Design, Playback.
-import { slide, selection, selected, editCell, tool, theme as themeSig, openDialog, updateEl, cropMode, mediaUrl, lastColors, mediaPlaying, finishEditing } from '../../core/store.js'
+import { slide, selection, selected, editCell, tool, theme as themeSig, openDialog, updateEl, cropMode, mediaUrl, lastColors, mediaPlaying, finishEditing, addMedia } from '../../core/store.js'
 import { changePicture } from '../../editor/Stage.jsx'
+import { pickPicture } from '../../app/commands.js'
 import { hexColor, solid, round2, recrop, findEl } from '../../core/model.js'
 import { Group, Col, Row, Gallery, PickGrid, NumField, Check, ColorBtn, unitFmt, unitParse, addRecentColor } from '../controls.jsx'
 import {
@@ -422,11 +423,8 @@ export function PlaybackTab () {
       {m?.type === 'video' && (
         <Group label="Poster frame">
           <Btn size="lg" icon="image" label="Poster image" desc="Show a picture of your choice before the video plays." onClick={async () => {
-            const p = await window.prizmaNative.openDialog({ title: 'Poster image', filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] })
-            if (!p?.[0]) return
-            const bytes = await window.prizmaNative.readFile(p[0])
-            const { addMedia } = await import('../../core/store.js')
-            set({ poster: addMedia(bytes, /png$/i.test(p[0]) ? 'image/png' : /webp$/i.test(p[0]) ? 'image/webp' : 'image/jpeg') })
+            const pic = await pickPicture('Poster image')
+            if (pic) set({ poster: addMedia(pic.bytes, pic.mime) })
           }} />
           <Btn size="lg" icon="image-off" label="Reset poster" disabled={!m.poster} onClick={() => set({ poster: null })} />
         </Group>
