@@ -1,0 +1,120 @@
+{
+  "name": "prizma",
+  "productName": "Prizma",
+  "version": "1.0.5",
+  "description": "Prizma — presentation studio",
+  "author": "Marko Veselinović",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron .",
+    "dist": "node scripts/build.mjs && electron-builder --win nsis --x64 --publish never",
+    "test": "node scripts/build.mjs && bash tests/regression/suite.sh"
+  },
+  "devDependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/unbounded": "^5.3.0",
+    "@preact/signals": "^2.11.3",
+    "dompurify": "^3.4.17",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "immer": "^11.1.21",
+    "jszip": "^3.10.2",
+    "lucide": "^1.56.0",
+    "pdfjs-dist": "^4.10.38",
+    "pptxtojson": "^2.2.0",
+    "preact": "^11.0.1"
+  },
+  "build": {
+    "appId": "com.prizma.app",
+    "productName": "Prizma",
+    "copyright": "© 2026 Marko Veselinović",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "package.json",
+      "src/main/**",
+      "dist/**",
+      "build/icon.ico",
+      "build/icon.png"
+    ],
+    "asar": true,
+    "compression": "normal",
+    "fileAssociations": [
+      {
+        "ext": "pptx",
+        "name": "Prizma.pptx",
+        "description": "PowerPoint Presentation",
+        "icon": "doc-pptx.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "pptm",
+        "name": "Prizma.pptm",
+        "description": "PowerPoint Macro-Enabled Presentation",
+        "icon": "doc-pptx.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "ppsx",
+        "name": "Prizma.ppsx",
+        "description": "PowerPoint Slide Show",
+        "icon": "doc-show.ico",
+        "role": "Viewer"
+      },
+      {
+        "ext": "potx",
+        "name": "Prizma.potx",
+        "description": "PowerPoint Template",
+        "icon": "doc-pptx.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "prizma",
+        "name": "Prizma.Presentation",
+        "description": "Prizma Presentation",
+        "icon": "doc-prizma.ico",
+        "role": "Editor",
+        "mimeType": "application/vnd.prizma.presentation"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "executableName": "Prizma",
+      "legalTrademarks": "Prizma"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Prizma",
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerHeader": "build/header.bmp",
+      "installerSidebar": "build/sidebar.bmp",
+      "uninstallerSidebar": "build/sidebar.bmp",
+      "uninstallDisplayName": "Prizma",
+      "artifactName": "Prizma-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": []
+  }
+}

@@ -1,0 +1,7 @@
+/* Prizma interface */
+@import './base.css';
+@import './chrome.css';
+@import './workspace.css';
+@import './layers.css';
+@import './backstage.css';
+@import './show.css';

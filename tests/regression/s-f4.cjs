@@ -1,0 +1,22 @@
+// F4: View › Grayscale turns the canvas, thumbnails and sorter gray; Color brings them back; the ribbon stays in color
+module.exports = async ({ page, ev, wait, errors, shot }) => {
+  await ev(`__pz.tour.loadTour(); __pz.store.backstage.value = null; __pz.store.goSlide(5); __pz.store.ribbonTab.value = 'view'`)
+  await wait(400)
+  const filt = () => ev(`[...document.querySelectorAll('.panel-stage .pz-slide, .thumbs .pz-slide, .sorter .pz-slide')].map(e => getComputedStyle(e).filter).filter((v, i, a) => a.indexOf(v) === i)`)
+  await page.getByRole('button', { name: 'Grayscale', exact: true }).first().click()
+  await wait(300)
+  const on = await filt()
+  await shot('f4-gray')
+  await ev(`__pz.store.view.value = 'sorter'`); await wait(300)
+  const sorter = await ev(`[...document.querySelectorAll('.sorter .pz-slide')].map(e => getComputedStyle(e).filter).filter((v, i, a) => a.indexOf(v) === i)`)
+  await ev(`__pz.store.view.value = 'normal'`); await wait(300)
+  const ribbon = await ev(`getComputedStyle(document.querySelector('.ribbon')).filter`)
+  await page.getByRole('button', { name: 'Color', exact: true }).first().click()
+  await wait(300)
+  const off = await filt()
+  console.log('gray on', JSON.stringify(on), 'sorter', JSON.stringify(sorter), 'ribbon', ribbon, 'gray off', JSON.stringify(off))
+  if (on.length !== 1 || !/grayscale\(1\)/.test(on[0])) errors.push('F4: slides not gray in Grayscale view')
+  if (sorter.length !== 1 || !/grayscale\(1\)/.test(sorter[0])) errors.push('F4: sorter not gray')
+  if (ribbon !== 'none') errors.push('F4: ribbon turned gray too')
+  if (off.some(v => /grayscale/.test(v))) errors.push('F4: Color did not restore the slides')
+}

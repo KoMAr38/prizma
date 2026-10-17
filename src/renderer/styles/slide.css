@@ -1,0 +1,33 @@
+/* Slide rendering — shared by editor, thumbnails, show and print */
+.pz-slide { position: relative; overflow: hidden; flex: none; color: var(--c-dk1); font-family: var(--f-minor); contain: layout paint style; -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
+.pz-master { position: absolute; inset: 0; pointer-events: none; }
+.pz-el { position: absolute; transform-origin: 50% 50%; }
+.pz-svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.pz-linesvg { width: auto; height: auto; }
+.pz-tbody { position: absolute; display: flex; flex-direction: column; box-sizing: border-box; min-width: 0; }
+.pz-rt { flex: none; white-space: pre-wrap; overflow-wrap: break-word; line-height: 1.2; font-size: 18pt; outline: none; min-height: 1em; }
+.pz-rt p { margin: 0; }
+.pz-rt p[data-bu]::before { content: attr(data-bu); display: inline-block; width: var(--hang, 1.2em); text-indent: 0; font-size: calc(var(--bu-sz, 1em) * var(--bu-scale, 1)); color: var(--bu-color, inherit); font-style: normal; font-weight: normal; text-decoration: none; vertical-align: baseline; }
+.pz-rt p[data-empty]::before { content: none !important; }
+.pz-rt p[data-num][data-lvl][data-empty] { counter-increment: none; }
+.pz-rt p[data-num]::before { display: inline-block; width: var(--hang, 1.8em); text-indent: 0; color: var(--bu-color, inherit); font-size: var(--bu-sz, 1em); font-style: normal; text-decoration: none; }
+.pz-rt a { color: var(--c-hlink); text-decoration: underline; }
+.pz-rt sup { vertical-align: super; font-size: 0.65em; }
+.pz-rt sub { vertical-align: sub; font-size: 0.65em; }
+.pz-prompt { opacity: .55; pointer-events: none; }
+.pz-imgclip { position: absolute; inset: 0; overflow: hidden; }
+.pz-imgclip img { position: absolute; max-width: none; user-select: none; -webkit-user-drag: none; }
+.pz-missing { position: absolute; inset: 0; display: grid; place-items: center; background: repeating-linear-gradient(45deg, #8882 0 6pt, #8881 6pt 12pt); color: #888; }
+.pz-table { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; }
+.pz-table td { overflow: hidden; box-sizing: border-box; }
+.pz-table .pz-rt { font-size: inherit; }
+.pz-chart { position: absolute; inset: 0; }
+.pz-video, .pz-audio { position: absolute; inset: 0; display: grid; place-items: center; background: #000; overflow: hidden; }
+.pz-audio { background: transparent; color: var(--c-accent1); }
+.pz-video img { width: 100%; height: 100%; object-fit: contain; }
+.pz-play { position: absolute; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.55); color: #fff; }
+.pz-hf { position: absolute; inset: 0; pointer-events: none; }
+.pz-ghost { opacity: .35; }
+.pz-picph { border: 1.5px dashed color-mix(in srgb, var(--c-dk1) 35%, transparent); }
+.pz-picph-in { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: color-mix(in srgb, var(--c-dk1) 55%, transparent); font: 11pt var(--f-minor); text-align: center; }
+.pz-ph-empty::after { content: ''; position: absolute; inset: 0; border: 1px dashed color-mix(in srgb, var(--c-dk1) 30%, transparent); pointer-events: none; }
