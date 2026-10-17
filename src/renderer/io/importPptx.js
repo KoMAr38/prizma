@@ -187,15 +187,37 @@ function fontFromTypeface (tf, th, isTitle) {
   return tf
 }
 
-// Chart extras that pptxtojson does not expose (legend, title, labels, font size, colours)
+// A chart's cached range (c:cat, c:val, c:xVal…) as cell texts by point index, so a blank cell keeps its place; category
+// levels join outer level first ("2023 Q1"), an outer label holding until the next one
+function chartCells (n, max) {
+  const c = n && [...n.children].map(r => /Lit$/.test(r.localName) ? r : [...r.children].find(x => /Cache$/.test(x.localName))).find(Boolean)
+  if (!c) return null
+  const lv = kids(c, 'lvl'), levels = (lv.length ? lv : [c]).map(l => new Map(kids(l, 'pt').map(p => [+p.getAttribute('idx'), kid(p, 'v')?.textContent ?? ''])))
+  let len = +kid(c, 'ptCount')?.getAttribute('val') || 0
+  for (const l of levels) for (const i of l.keys()) if (i >= len) len = i + 1
+  const last = levels.map(() => '')
+  return { fmt: kid(c, 'formatCode')?.textContent, cells: Array.from({ length: Math.min(len, max) }, (_, i) => levels.map((l, k) => (last[k] = l.get(i) ?? (k ? last[k] : ''))).reverse().filter(Boolean).join(' ')) }
+}
+// A category cell as PowerPoint shows it: a date format turns the Excel serial back into a date
+// shortcut: other number formats (%, decimals) show the plain value and 1904-based workbooks are 4 years off, read them if decks need it
+function catText (v, fmt) {
+  if (!v || !fmt || isNaN(+v)) return v
+  const f = fmt.replace(/\[[^\]]*\]|"[^"]*"|[\\_*]./g, '')
+  if (!/[dmy]/i.test(f) || /[hs]/i.test(f)) return v
+  return new Date(Math.round((+v - 25569) * 864e5)).toLocaleDateString(undefined, { timeZone: 'UTC', year: /yyyy/i.test(f) ? 'numeric' : /yy/i.test(f) ? '2-digit' : undefined, month: /mmmm/i.test(f) ? 'long' : /mmm/i.test(f) ? 'short' : /m/i.test(f) ? 'numeric' : undefined, day: /d/i.test(f) ? 'numeric' : undefined })
+}
+// Chart data and extras, read from the chart part: pptxtojson drops blank cells (later values slide into the wrong
+// categories), multi-level and date categories, and every chart group but the last
 async function chartInfo (zip, partPath, scheme) {
   const x = await readXml(zip, partPath)
   if (!x) return null
   const cs = x.documentElement
   const chart = kid(cs, 'chart')
   const plot = kid(chart, 'plotArea')
-  const typeNode = plot ? [...plot.children].find(n => /Chart$/.test(n.localName)) : null
-  const sers = typeNode ? kids(typeNode, 'ser') : []
+  const types = plot ? [...plot.children].filter(n => /Chart$/.test(n.localName) && kid(n, 'ser')) : []
+  const typeNode = types[0] || null
+  // a combo chart (columns and a line) keeps every series, drawn as its first chart type
+  const sers = types.flatMap(t => kids(t, 'ser'))
   const textOf = n => n ? [...n.getElementsByTagNameNS('*', 't')].map(t => t.textContent).join('') : ''
   // a series name is a cached cell value (c:v) or rich text (a:t)
   const serName = ser => { const tx = kid(ser, 'tx'); return tx ? [...tx.getElementsByTagNameNS('*', 'v')].map(v => v.textContent).join('') || textOf(tx) : '' }
@@ -205,8 +227,15 @@ async function chartInfo (zip, partPath, scheme) {
   const autoDeleted = yes(kid(chart, 'autoTitleDeleted'))
   let title = titleNode ? textOf(kid(titleNode, 'tx')) : ''
   if (titleNode && !title) title = sers.length === 1 ? serName(sers[0]) : 'Chart Title'
-  if (!titleNode && !autoDeleted && sers.length === 1 && typeNode && !/pie|doughnut/i.test(typeNode.localName)) title = ''
   if (!titleNode && !autoDeleted && sers.length === 1) title = serName(sers[0])
+  const xy = /scatter|bubble/i.test(typeNode?.localName || '')
+  // shortcut: a chart keeps at most a million cells (a corrupt ptCount can't allocate gigabytes), raise it if real decks need more
+  const max = 1e6 / (sers.length || 1)
+  const cat = chartCells(kid(sers[0], xy ? 'xVal' : 'cat'), max), vals = sers.map(sr => chartCells(kid(sr, xy ? 'yVal' : 'val'), max)?.cells || [])
+  // every point gets a category, so a save writes all the values
+  const len = Math.max(cat?.cells.length || 0, ...vals.map(v => v.length))
+  const categories = Array.from({ length: len }, (_, i) => cat ? catText(cat.cells[i] ?? '', cat.fmt) : String(i + 1))
+  const series = sers.map((sr, i) => ({ name: serName(sr) || 'Series ' + (i + 1), values: Array.from({ length: len }, (_, j) => +vals[i][j] || 0) }))
   const legend = kid(chart, 'legend')
   const legendPos = legend ? (kid(legend, 'legendPos')?.getAttribute('val') || 'r') : null
   const dl = typeNode ? kid(typeNode, 'dLbls') : null
@@ -214,7 +243,8 @@ async function chartInfo (zip, partPath, scheme) {
   const labels = !!(anyLabel(dl) || sers.some(sr => anyLabel(kid(sr, 'dLbls'))))
   const szNode = kid(kid(kid(cs, 'txPr'), 'p') || null, 'pPr')
   const sz = szNode ? kid(szNode, 'defRPr')?.getAttribute('sz') : null
-  const seriesColors = sers.map(sr => colorOf(kid(kid(sr, 'spPr'), 'solidFill'), scheme))
+  // a line series has its colour on the line
+  const seriesColors = sers.map(sr => colorOf(kid(kid(sr, 'spPr'), 'solidFill') || kid(kid(kid(sr, 'spPr'), 'ln'), 'solidFill'), scheme))
   const firstSer = sers[0]
   const pointColors = firstSer ? kids(firstSer, 'dPt').map(d => ({ idx: +(kid(d, 'idx')?.getAttribute('val') || 0), color: colorOf(kid(kid(d, 'spPr'), 'solidFill'), scheme) })) : []
   const catAx = plot ? kid(plot, 'catAx') : null
@@ -223,7 +253,8 @@ async function chartInfo (zip, partPath, scheme) {
   // value-axis gridlines, as the chart has them (pie charts have no axes and keep the default)
   const valAxes = plot ? kids(plot, 'valAx') : []
   const gridlines = valAxes.length ? valAxes.some(ax => !!kid(ax, 'majorGridlines')) : null
-  return { title: title || '', legend: legendPos, labels, fontSize: sz ? +sz / 100 : null, seriesColors, pointColors, reversed, is3d, vary: yes(kid(typeNode, 'varyColors')), gridlines }
+  const attr = name => kid(typeNode, name)?.getAttribute('val')
+  return { chartType: typeNode?.localName, barDir: attr('barDir'), grouping: attr('grouping'), holeSize: attr('holeSize'), categories, series, title: title || '', legend: legendPos, labels, fontSize: sz ? +sz / 100 : null, seriesColors, pointColors, reversed, is3d, gridlines }
 }
 // Table style definitions from ppt/tableStyles.xml
 function parseTableStyles (xml, scheme) {
@@ -946,25 +977,27 @@ function convertEl (e, ctx) {
       }
     }
     case 'chart': {
+      const cx = e.id ? ctx.info.charts?.[e.id] : null
+      // the data chartInfo read from the chart part; pptxtojson's stays for the charts it does not read (layouts, masters)
+      const g = cx?.chartType ? cx : e
       const data = Array.isArray(e.data) ? e.data : []
       const first = data[0]
       // scatter and bubble charts arrive as plain lists: [x values, y values of series 1, of series 2, …]
       const xy = Array.isArray(first)
-      const cats = xy ? first.map(String) : first?.xlabels ? Object.keys(first.xlabels).sort((a, b) => +a - +b).map(k => first.xlabels[k]) : (first?.values || []).map(v => String(v.x))
-      const T = e.chartType || ''
-      const type = /bar/i.test(T) ? (e.barDir === 'bar' ? 'bar' : 'column') : /line/i.test(T) ? 'line' : /area/i.test(T) ? 'area' : /doughnut/i.test(T) ? 'doughnut' : /pie/i.test(T) ? 'pie' : /scatter|bubble/i.test(T) ? 'scatter' : /radar/i.test(T) ? 'radar' : 'column'
-      const series = xy
+      const cats = g.categories || (xy ? first.map(String) : first?.xlabels ? Object.keys(first.xlabels).sort((a, b) => +a - +b).map(k => first.xlabels[k]) : (first?.values || []).map(v => String(v.x)))
+      const T = g.chartType || ''
+      const type = /bar/i.test(T) ? (g.barDir === 'bar' ? 'bar' : 'column') : /line/i.test(T) ? 'line' : /area/i.test(T) ? 'area' : /doughnut/i.test(T) ? 'doughnut' : /pie/i.test(T) ? 'pie' : /scatter|bubble/i.test(T) ? 'scatter' : /radar/i.test(T) ? 'radar' : 'column'
+      const series = g.series || (xy
         ? data.slice(1).map((ys, i) => ({ name: 'Series ' + (i + 1), values: ys.map(v => +v || 0) }))
-        : data.map(s => ({ name: s.key ?? 'Series', values: (s.values || []).map(v => +v.y || 0) }))
-      const cx = e.id ? ctx.info.charts?.[e.id] : null
+        : data.map(s => ({ name: s.key ?? 'Series', values: (s.values || []).map(v => +v.y || 0) })))
       let colors = (e.colors || []).filter(Boolean)
       if (cx?.seriesColors?.some(Boolean)) colors = cx.seriesColors.map((c, i) => c || colors[i]).filter(Boolean)
       return {
-        ...base, type: 'chart', chartType: type, look: cx?.is3d ? '3d' : 'flat', grouping: /percent/i.test(e.grouping || '') ? 'percent' : /stacked/i.test(e.grouping || '') ? 'stacked' : 'clustered',
+        ...base, type: 'chart', chartType: type, look: cx?.is3d ? '3d' : 'flat', grouping: /percent/i.test(g.grouping || '') ? 'percent' : /stacked/i.test(g.grouping || '') ? 'stacked' : 'clustered',
         categories: cats, series: series.map((s, i) => colors[i] && type !== 'pie' && type !== 'doughnut' ? { ...s, color: colors[i].slice(0, 7) } : s),
         ...(type === 'pie' || type === 'doughnut' ? (cx?.pointColors?.length ? { pointColors: cats.map((_, i) => cx.pointColors.find(p => p.idx === i)?.color || null) } : {}) : {}),
         ...(cx?.reversed ? { reversed: true } : {}),
-        opts: { legend: cx ? ({ r: 'right', l: 'right', t: 'top', b: 'bottom', tr: 'right' })[cx.legend] || 'none' : 'bottom', labels: !!cx?.labels, title: cx?.title || '', gridlines: cx?.gridlines ?? true, holeSize: e.holeSize || 55 },
+        opts: { legend: cx ? ({ r: 'right', l: 'right', t: 'top', b: 'bottom', tr: 'right' })[cx.legend] || 'none' : 'bottom', labels: !!cx?.labels, title: cx?.title || '', gridlines: cx?.gridlines ?? true, holeSize: g.holeSize || 55 },
         ts: { font: '+minor', size: cx?.fontSize || 13, color: 'dk1' }
       }
     }
