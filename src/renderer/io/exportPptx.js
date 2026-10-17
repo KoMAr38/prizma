@@ -9,7 +9,7 @@ import { transitionXml, timingXml } from './pptx/anim.js'
 import { mediaInfo, settings, appInfo, redraw } from '../core/store.js'
 import { imageSize } from '../core/actions.js'
 import { walk, luminance, ELEMENT_LABEL, solid } from '../core/model.js'
-import { SHAPES, shapeParts, pathDriven, linePath } from '../core/shapes.js'
+import { SHAPES, shapeParts, pathDriven, linePath, picShape } from '../core/shapes.js'
 import { LAYOUTS, layoutPlaceholders, themeSpec, slideDecor, PROMPTS } from '../core/themes.js'
 import { tableCellLook } from '../render/tableStyles.js'
 import { iconNode, iconSvgMarkup } from '../ui/Icon.jsx'
@@ -289,7 +289,6 @@ function cxnXml (el, c, off) {
     : prstXml(k.startsWith('elbow') ? 'bentConnector3' : k.startsWith('curve') ? 'curvedConnector3' : 'line', {})
   return `<p:cxnSp><p:nvCxnSpPr>${cNvPr(el, c, id)}<p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrmXml(el, { off })}${geom}<a:noFill/>${lineXml(el.line, c, el.opacity ?? 1, 'round')}${effectsXml(el, c)}</p:spPr></p:cxnSp>`
 }
-const roundAdj = (r, el) => ({ adj: Math.min(0.5, r / Math.max(1, Math.min(el.w, el.h))) })
 function picXml (el, c, off) {
   const im = c.env.media.img.get(el.src)
   if (!im) return ''
@@ -307,12 +306,9 @@ function picXml (el, c, off) {
   if (im.svg) fx += `<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${NS.asvg}" r:embed="${c.rels.add(REL.image, '../media/' + im.svg)}"/></a:ext></a:extLst>`
   const cr = el.crop
   const src = cr && (cr.l || cr.t || cr.r || cr.b) ? `<a:srcRect${['l', 't', 'r', 'b'].map(k => cr[k] ? ` ${k}="${Math.round(cr[k] * 100000)}"` : '').join('')}/>` : '<a:srcRect/>'
-  const geom = el.geom && el.geom !== 'rect' && PRESETS.has(el.geom)
-    ? prstXml(el.geom, el.geom === 'roundRect' ? roundAdj(el.radius ?? 12, el) : {})
-    : el.radius ? prstXml('roundRect', roundAdj(el.radius, el)) : prstXml('rect', {})
   return `<p:pic><p:nvPicPr>${cNvPr(el, c, id)}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${c.rels.add(REL.image, '../media/' + im.name)}">${fx}</a:blip>${src}<a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
-    `<p:spPr>${xfrmXml(el, { off })}${geom}${el.line ? lineXml(el.line, c, el.opacity ?? 1) : ''}${effectsXml(el, c)}</p:spPr></p:pic>`
+    `<p:spPr>${xfrmXml(el, { off })}${shapeGeom(picShape(el))}${el.line ? lineXml(el.line, c, el.opacity ?? 1) : ''}${effectsXml(el, c)}</p:spPr></p:pic>`
 }
 const LN_TAG = { left: 'lnL', right: 'lnR', top: 'lnT', bottom: 'lnB' }
 const sum = (list, i, n) => list.slice(i, i + n).reduce((a, b) => a + b, 0)
