@@ -82,6 +82,17 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     check(a === '[["A&B","C<D"],["S&P"]]' && b === a, 'chart texts keep "&" and "<", on a layout too: ' + a + ' / ' + b)
   })
 
+  await sec('text and outlines', async () => {
+    // slide numbers, vertical text, outlines with a colour and no width
+    const d = (await open('text.pptx')).doc
+    const by = n => d.slides[0].elements.find(e => e.name === n)
+    const left = d.slides.map(s => s.elements.filter(e => /Slide Number/.test(e.name || '')).length).join()
+    check(d.hf.number === true && left === '0,0' && /Page/.test(by('Page')?.html), `slide number placeholders become the deck's slide number, other text stays: ${d.hf.number} ${left} ${by('Page')?.html}`)
+    check(['V1', 'V2', 'V3'].map(n => by(n)?.vertical).join() === 'true,vert270,stacked', 'vertical text: ' + ['V1', 'V2', 'V3'].map(n => by(n)?.vertical).join())
+    const ln = n => JSON.stringify(by(n)?.line && [by(n).line.color, by(n).line.width])
+    check(ln('O1') === '["#FF0000",0.75]' && ln('O2') === '["#00B050",2]', 'an outline with a colour and no width is kept: ' + ln('O1') + ' ' + ln('O2'))
+  })
+
   await sec('reuse slides media', async () => {
     // the other file's pictures go when the dialog closes, but for those the inserted slides use; nothing else goes
     await open('ole.pptx')

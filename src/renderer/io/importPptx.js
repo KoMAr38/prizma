@@ -326,6 +326,7 @@ function styleCell (def, fl, r, c, rows, cols) {
 }
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+const VERTICAL = new Map([['vert', true], ['eaVert', true], ['vert270', 'vert270'], ['wordArtVert', 'stacked']])
 const DRAWN = new Set(['sp', 'cxnSp', 'pic', 'graphicFrame', 'grpSp', 'AlternateContent', 'contentPart'])
 const FILLS = new Set(['noFill', 'solidFill', 'gradFill', 'blipFill', 'pattFill', 'grpFill'])
 // Click actions on shapes: a jump to another slide, or a web/mail link
@@ -554,10 +555,17 @@ async function analyse (zip) {
         }
         const lnG = kid(kid(spPr, 'ln'), 'gradFill')
         if (lnG) { const gs = kids(path(lnG, 'gsLst'), 'gs'); if (gs.length) rec.lineColor = colorOf(gs[gs.length - 1], scheme) }
+        // an outline with its own colour and no width, which pptxtojson drops: the style's width, or 0.75 pt
+        const lnS = kid(kid(spPr, 'ln'), 'solidFill')
+        if (lnS && !kid(spPr, 'ln').hasAttribute('w')) rec.lineColor = colorOf(lnS, scheme)
         const body = kid(c, 'txBody')
         if (body) {
           const ph = phInfo(c)
           rec.ph = ph?.type || null
+          // pptxtojson knows only East Asian vertical text
+          rec.vertical = VERTICAL.get(kid(body, 'bodyPr')?.getAttribute('vert'))
+          // a slide number placeholder that shows the number: Prizma's own slide number replaces it
+          rec.num = rec.ph === 'sldNum' && [...body.getElementsByTagNameNS('*', 'fld')].some(f => f.getAttribute('type') === 'slidenum')
           const lst = kid(body, 'lstStyle')
           const layPh = ph ? findPh(laySpTree, ph) : null
           const masPh = ph ? findPh(masTree, ph) : null
@@ -906,7 +914,7 @@ function convertEl (e, ctx) {
         vAlign: va(e.vAlign), wrap: e.wrap !== false, autofit: e.autoFit?.type === 'shape' ? 'shape' : e.autoFit?.type === 'text' ? 'shrink' : 'none',
         // pptxtojson gives the shrink as a percentage (62.5), Prizma keeps a fraction
         ...(e.autoFit?.fontScale > 0 && e.autoFit.fontScale < 100 ? { fontScale: e.autoFit.fontScale / 100 } : {}),
-        ...(e.isVertical ? { vertical: true } : {}), ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
+        ...(sinfo?.vertical || e.isVertical ? { vertical: sinfo?.vertical || true } : {}), ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
       }
       if (sinfo?.ph && PH_ROLE[sinfo.ph]) el.ph = PH_ROLE[sinfo.ph]
       return el
@@ -930,7 +938,7 @@ function convertEl (e, ctx) {
         pathVB: g ? { w: g.w, h: g.h } : own ? null : e.pathViewBox ? { w: e.pathViewBox.width, h: e.pathViewBox.height } : null,
         fill: e.strokeOnly || sinfo?.bgFill || sinfo?.noFill ? null : convFill(e.fill, ctx.media), line: lineWithRefs(e, sinfo), html: fixHtml(e.content, sinfo, fixLinks),
         inset: e.textInset ? { l: e.textInset.l, t: e.textInset.t, r: e.textInset.r, b: e.textInset.b } : { ...DEFAULT_INSET },
-        vAlign: va(e.vAlign), wrap: e.wrap !== false, ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
+        vAlign: va(e.vAlign), wrap: e.wrap !== false, ...(sinfo?.vertical ? { vertical: sinfo.vertical } : {}), ...(shadow ? { shadow } : {}), ...(link ? { link } : {}), ts: {}
       }
       // "filled with the slide background": see-through here, the background shows anyway
       if (sinfo?.bgFill) el.bgFill = true
@@ -1113,6 +1121,7 @@ export async function importPptx (buffer, onProgress) {
     return /^(https?:|mailto:|ftp:|file:|#)/i.test(href) ? href : null
   }
   const morph = new Map(), tinted = new Map()
+  let slideNumbers = false
   // a slide part left out of sldIdLst is not a slide; one pptxtojson could not read comes out empty
   const slides = info.slides.map((sinfo, i) => {
     const s = json.slides[parsed.indexOf(info.slidePaths[i])] || {}
@@ -1142,6 +1151,9 @@ export async function importPptx (buffer, onProgress) {
       const fill = bg = { ...bg }
       pending.push(tinted.get(key).then(src => { fill.src = src }))
     }
+    // a slide number placeholder showing the number becomes the deck's slide number, as in decks Prizma wrote
+    const nums = new Set(Object.entries(sinfo.shapes).filter(([, r]) => r.num).map(([sid]) => ids.get(sid)).filter(Boolean))
+    if (nums.size) { elements = elements.filter(e => !nums.has(e.id)); slideNumbers = true }
     if (spec) {
       // footers come back as settings; untouched Prizma layouts redraw their own art and background
       const hfIds = new Set(Object.entries(sinfo.shapes).filter(([, r]) => HF_PH.has(r.ph)).map(([sid]) => ids.get(sid)).filter(Boolean))
@@ -1167,7 +1179,7 @@ export async function importPptx (buffer, onProgress) {
     slides: slides.length ? slides : [{ id: uid('s'), layout: 'blank', bg: null, master: [], elements: [], notes: '', hidden: false, transition: null, animations: [], comments: [] }],
     props: await readProps(zip),
     show: spec && marker.show ? marker.show : await readShowProps(zip, slides.length),
-    hf: spec && marker.hf ? marker.hf : { number: false, footer: '', date: false, dateText: '', hideOnTitle: true },
+    hf: spec && marker.hf ? marker.hf : { number: slideNumbers, footer: '', date: false, dateText: '', hideOnTitle: true },
     imported: !spec
   })
 }
