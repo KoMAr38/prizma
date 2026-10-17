@@ -196,7 +196,7 @@ async function write (p, fmt) {
   }
 }
 // Commit the text being edited without leaving the editor
-function finishEditingSoft () {
+export function finishEditingSoft () {
   const ed = document.querySelector('[data-editor]')
   if (ed && ed._pzCommit) ed._pzCommit()
 }

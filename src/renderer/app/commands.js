@@ -3,7 +3,7 @@ import { computed, signal } from '@preact/signals'
 import {
   doc, slide, slideIdx, selection, editing, editCell, slideSel, selected, canUndo, canRedo, undo, redo, zoom, fitZoom, view, ribbonTab,
   ribbonCollapsed, backstage, pane, formatTab, showNotes, showRuler, showGrid, showGuides, snapGrid, settings, native, painter, fmtTick,
-  docVersion, focusArea, tool, cropMode, openDialog, toast, select, goSlide, finishEditing, editorReq, theme as themeSig, searchOpen, update, grayscale
+  docVersion, focusArea, tool, cropMode, openDialog, toast, select, goSlide, finishEditing, editorReq, theme as themeSig, searchOpen, update, grayscale, setSetting
 } from '../core/store.js'
 import * as A from '../core/actions.js'
 import { richState, stepSize } from '../core/html.js'
@@ -131,12 +131,8 @@ def('para.vMiddle', { label: 'Align text middle', icon: 'align-vertical-justify-
 def('para.vBottom', { label: 'Align text bottom', icon: 'align-vertical-justify-end', run: () => A.setProps({ vAlign: 'bottom' }), checked: () => fmtState.value?.vAlign === 'bottom' })
 
 // ---------------- clipboard & editing ----------------
-def('edit.undo', { label: 'Undo', icon: 'undo-2', keys: 'Ctrl+Z', run: () => { finishEditingForHistory(); undo() }, enabled: () => canUndo.value, global: true })
-def('edit.redo', { label: 'Redo', icon: 'redo-2', keys: 'Ctrl+Y', alt: ['Ctrl+Shift+Z'], run: () => { finishEditingForHistory(); redo() }, enabled: () => canRedo.value, global: true })
-function finishEditingForHistory () {
-  const ed = document.querySelector('[data-editor]')
-  if (ed && ed._pzCommit) ed._pzCommit()
-}
+def('edit.undo', { label: 'Undo', icon: 'undo-2', keys: 'Ctrl+Z', run: () => { F.finishEditingSoft(); undo() }, enabled: () => canUndo.value, global: true })
+def('edit.redo', { label: 'Redo', icon: 'redo-2', keys: 'Ctrl+Y', alt: ['Ctrl+Shift+Z'], run: () => { F.finishEditingSoft(); redo() }, enabled: () => canRedo.value, global: true })
 def('edit.cut', { label: 'Cut', icon: 'scissors', keys: 'Ctrl+X', run: () => { if (isEditingText()) { document.execCommand('cut'); return } if (focusArea.value === 'thumbs') A.copySlides(slideIds(), true); else A.copySelection(true) } })
 def('edit.copy', { label: 'Copy', icon: 'copy', keys: 'Ctrl+C', run: () => { if (isEditingText()) { document.execCommand('copy'); return } if (focusArea.value === 'thumbs') A.copySlides(slideIds()); else A.copySelection() } })
 def('edit.paste', { label: 'Paste', icon: 'clipboard-paste', keys: 'Ctrl+V', run: () => { if (isEditingText()) { pasteText(); return } A.pasteFromClipboard() } })
@@ -251,13 +247,12 @@ def('view.animPane', { label: 'Animation pane', icon: 'list-video', run: () => {
 def('view.collapseRibbon', { label: 'Collapse the ribbon', icon: 'chevrons-up', keys: 'Ctrl+F1', run: () => { ribbonCollapsed.value = !ribbonCollapsed.value }, checked: () => ribbonCollapsed.value, global: true })
 def('view.newWindow', { label: 'New window', icon: 'app-window', run: () => native.newWindow(null) })
 def('view.gray', { label: 'Grayscale', icon: 'contrast', tags: 'black and white grey', run: () => { grayscale.value = !grayscale.value }, checked: () => grayscale.value })
-def('view.spelling', { label: 'Check spelling as you type', icon: 'spell-check', tags: 'spelling proofing', run: () => { const v = settings.value.spellcheck === false; settings.value = { ...settings.value, spellcheck: v }; native?.setSettings({ spellcheck: v }) }, checked: () => settings.value.spellcheck !== false })
+def('view.spelling', { label: 'Check spelling as you type', icon: 'spell-check', tags: 'spelling proofing', run: () => setSetting({ spellcheck: settings.value.spellcheck === false }), checked: () => settings.value.spellcheck !== false })
 // the interface on screen: "Same as Windows" resolves to whatever Windows uses now
 export const uiShown = signal('dark')
 def('view.uiTheme', { label: 'Switch light/dark interface', icon: 'sun-moon', tags: 'dark mode light mode night', run: () => setUiTheme(uiShown.value === 'dark' ? 'light' : 'dark') })
 export function setUiTheme (t) {
-  settings.value = { ...settings.value, theme: t }
-  native?.setSettings({ theme: t })
+  setSetting({ theme: t })
   applyUiTheme()
 }
 export function applyUiTheme () {

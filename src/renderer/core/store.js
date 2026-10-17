@@ -264,6 +264,10 @@ export function updateEls (ids, fn, opts) {
     for (const id of ids) for (const g of parentGroups(s, id)) refitGroup(g) // a moved child changes its group's box
   }, opts)
 }
+export function setSetting (patch) {
+  settings.value = { ...settings.value, ...patch }
+  native?.setSettings(patch)
+}
 export function updateSlide (fn, opts, idx = slideIdx.value) {
   update(d => { if (d.slides[idx]) fn(d.slides[idx], d) }, opts)
 }

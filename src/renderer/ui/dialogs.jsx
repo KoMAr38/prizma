@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'preact/hooks'
 import {
   dialog, closeDialog, doc, slide, slideIdx, selection, selected, editing, editCell, editorReq, settings, fonts, zoom, fitZoom, native, update, updateEl,
-  select, goSlide, toast, appInfo, theme as themeSig, finishEditing, findState, recentColors
+  select, goSlide, toast, appInfo, theme as themeSig, finishEditing, findState, recentColors, setSetting
 } from '../core/store.js'
 import { SLIDE_SIZES, hexColor, textBox, findEl } from '../core/model.js'
 import { textOf, FONT_SIZES, searchRe } from '../core/html.js'
@@ -322,7 +322,7 @@ function SetupShowDlg () {
           {o.from && <div class="dlg-row"><NumField value={o.from} min={1} max={n} width={70} tip="First slide" onChange={v => set({ from: Math.round(v) })} /><span>to</span><NumField value={o.to || n} min={1} max={n} width={70} tip="Last slide" onChange={v => set({ to: Math.round(v) })} /></div>}
           <div class="cp-h">Monitors</div>
           <Field label="Slide show monitor"><Select value={String(o.display || 'auto')} onChange={v => set({ display: v })} options={[{ value: 'auto', label: 'Automatic' }, ...displays.map((x, i) => ({ value: String(x.id), label: `${x.primary ? 'Primary' : 'Monitor ' + (i + 1)} (${x.width}×${x.height})` }))]} /></Field>
-          <Check label="Use presenter view" checked={settings.value.presenterView !== false} onChange={v => { settings.value = { ...settings.value, presenterView: v }; native?.setSettings({ presenterView: v }) }} />
+          <Check label="Use presenter view" checked={settings.value.presenterView !== false} onChange={v => setSetting({ presenterView: v })} />
         </div>
       </div>
     </Dialog>
