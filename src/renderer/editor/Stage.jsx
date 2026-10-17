@@ -7,7 +7,7 @@ import {
   focusArea, editorReq, ribbonTab, select, update, updateEl, updateEls, toast, selected, finishEditing, openDialog, settings, showRuler
 } from '../core/store.js'
 import { Rulers } from './Rulers.jsx'
-import { PX, findEl, parentFrame, parentGroups, refitGroup, onSlide, bounds, unionBounds, rotatePt, lineEnds, boxFromPoints, round2, screenCrop } from '../core/model.js'
+import { PX, findEl, walk, parentFrame, parentGroups, refitGroup, onSlide, bounds, unionBounds, rotatePt, lineEnds, boxFromPoints, round2, screenCrop } from '../core/model.js'
 import { SlideView } from '../render/SlideView.jsx'
 import { TextEditor, CellEditor } from './TextEditor.jsx'
 import * as A from '../core/actions.js'
@@ -101,12 +101,17 @@ export function Stage () {
     const smart = settings.value.smartGuides !== false
     const xs = smart ? [0, W / 2, W] : [], ys = smart ? [0, H / 2, H] : []
     if (showGuides.value) { xs.push(guidePos.x ?? W / 2); ys.push(guidePos.y ?? H / 2) }
-    if (smart) for (const e of s.elements) {
-      if (exclude.has(e.id) || e.hidden) continue
-      const b = bounds(e)
-      xs.push(b.x, b.x + b.w / 2, b.x + b.w)
-      ys.push(b.y, b.y + b.h / 2, b.y + b.h)
-    }
+    // a group around a dragged object would snap it back to its own old place: the group's other objects count instead
+    const holds = new Set([...exclude].flatMap(id => parentGroups(s, id).map(g => g.id)))
+    if (smart) walk(s.elements, (e, parent) => {
+      if (holds.has(e.id)) return
+      if (!exclude.has(e.id) && !e.hidden) {
+        const b = bounds(parent ? onSlide(s, e) : e)
+        xs.push(b.x, b.x + b.w / 2, b.x + b.w)
+        ys.push(b.y, b.y + b.h / 2, b.y + b.h)
+      }
+      return false
+    })
     return { xs, ys }
   }
   const snapBox = (b, lines, alt) => {
