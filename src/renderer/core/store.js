@@ -128,6 +128,20 @@ async function smallCopy (m) {
   g.drawImage(bmp, 0, 0, c.width, c.height); bmp.close()
   return URL.createObjectURL(await c.convertToBlob(m.mime === 'image/jpeg' ? { type: 'image/jpeg', quality: 0.85 } : { type: 'image/png' }))
 }
+// A picture drawn again at w × h (its own size when w is 0) as `type`. With no type it becomes what PowerPoint reads:
+// a JPEG, or a PNG when it has see-through parts. Returns { bytes, mime, w, h }.
+export async function redraw (bytes, mime, w, h, type) {
+  const bmp = await createImageBitmap(new Blob([bytes], { type: mime }), w ? { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' } : {})
+  const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d')
+  g.drawImage(bmp, 0, 0); bmp.close()
+  if (!type) {
+    const px = g.getImageData(0, 0, c.width, c.height).data
+    let i = 3
+    while (i < px.length && px[i] === 255) i += 4
+    type = i < px.length ? 'image/png' : 'image/jpeg'
+  }
+  return { bytes: new Uint8Array(await (await c.convertToBlob({ type, quality: 0.92 })).arrayBuffer()), mime: type, w: c.width, h: c.height }
+}
 function dropSmall (id) {
   const u = small.get(id)?.value
   if (u && u !== mediaMap.get(id)?.url) URL.revokeObjectURL(u)

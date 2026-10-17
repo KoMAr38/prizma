@@ -257,19 +257,19 @@ export function imageSize (bytes, mime, url) {
 }
 // A picture about to be inserted: { bytes, mime, w, h }, or null when Prizma can't show it. Like PowerPoint's default
 // compression, a photo bigger than the slide can show at 220 ppi is scaled down to that (a 12 MP photo keeps about a third
-// of its pixels); Options › "Keep pictures at full size" turns this off. GIF, SVG and the rest go in as they are.
+// of its pixels); Options › "Keep pictures at full size" turns this off. WebP, AVIF and the other formats PowerPoint
+// can't read become a JPEG (a PNG when see-through) here, once; GIF, BMP and SVG go in as they are.
 export async function loadPicture (bytes, mime) {
   const sz = await imageSize(bytes, mime)
   if (!sz) return null
   const z = S(), k = Math.min(z.w / 72 * 220 / sz.w, z.h / 72 * 220 / sz.h)
-  if (k > 0.9 || settings.value.keepPictures || !/^image\/(jpeg|png)$/.test(mime)) return { bytes, mime, ...sz }
-  const w = Math.round(sz.w * k), h = Math.round(sz.h * k)
+  const web = !/^image\/(jpeg|png|gif|bmp|svg\+xml)$/.test(mime)
+  const shrink = k <= 0.9 && !settings.value.keepPictures && (web || /^image\/(jpeg|png)$/.test(mime))
+  if (!web && !shrink) return { bytes, mime, ...sz }
   try {
-    const bmp = await createImageBitmap(new Blob([bytes], { type: mime }), { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' })
-    const c = new OffscreenCanvas(w, h)
-    c.getContext('2d').drawImage(bmp, 0, 0); bmp.close()
-    return { bytes: new Uint8Array(await (await c.convertToBlob({ type: mime, quality: 0.92 })).arrayBuffer()), mime, w, h }
-  } catch (e) { console.warn('picture kept at full size', e); return { bytes, mime, ...sz } }
+    const { redraw } = await import('./store.js')
+    return await redraw(bytes, mime, shrink ? Math.round(sz.w * k) : 0, shrink ? Math.round(sz.h * k) : 0, web ? null : mime)
+  } catch (e) { console.warn('picture kept as it is', e); return { bytes, mime, ...sz } }
 }
 export const cantShowPicture = name => toast(`Prizma can't show ${name || 'this picture'}. Save it as PNG or JPEG, then insert it again.`, { kind: 'error' })
 export function insertTable (rows, cols) {
