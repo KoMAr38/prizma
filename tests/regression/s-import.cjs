@@ -37,6 +37,9 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     await ev(`__pz.files.writeTo(${JSON.stringify(p)}, 'pptx')`)
     const r = await open(p), back = charts(r.doc)
     check(r.res === true && [a, b, c, d].every((x, i) => data(x) === data(back[i])), `a save keeps the data of every chart (${r.res}, ${r.toast || 'no message'}): ` + back.map(data).join(' / '))
+    // on a layout the chart is pptxtojson's, which has no two-level categories: each value still gets one
+    const l = (await open('layout-chart.pptx')).doc.slides[0].master?.find(e => e.type === 'chart')
+    check(l?.categories?.length === 4 && data(l).includes('[["Sales",[1,2,3,4]]]'), 'a chart on a layout has a category for each value: ' + data(l))
   })
 
   await sec('embedded objects', async () => {
@@ -164,10 +167,10 @@ module.exports = async ({ app, page, ev, wait, errors, OUT }) => {
     const r = await open(await prizma('link.prizma', bad))
     const h = r.doc.slides[0]?.elements.find(e => e.id === 'link1')?.html
     check(r.res === true && h && !/onerror|<img/.test(h), 'a slide id from a file puts no markup into text: ' + h)
-    // a document that says it unpacks to 4 GB
+    // a file that says it unpacks to 3 GB
     const big = await prizma('big.prizma', good, z => z.file('big.bin', 'x'))
     const b = fs.readFileSync(big)
-    b.writeUInt32LE(0xC0000000, b.lastIndexOf('big.bin') - 46 + 24) // its size in the central directory: 3 GB
+    b.writeUInt32LE(0xC0000000, b.lastIndexOf('big.bin') - 46 + 24) // big.bin's size in the central directory
     fs.writeFileSync(big, b)
     const r2 = await refused(big)
     check(r2.res === false && /1\.5 GB/.test(r2.toast), 'a .prizma that unpacks to more than 1.5 GB is refused: ' + r2.toast)

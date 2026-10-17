@@ -1026,6 +1026,8 @@ function convertEl (e, ctx) {
       const series = g.series || (xy
         ? data.slice(1).map((ys, i) => ({ name: 'Series ' + (i + 1), values: ys.map(v => +v || 0) }))
         : data.map(s => ({ name: unent(s.key) ?? 'Series', values: (s.values || []).map(v => +v.y || 0) })))
+      // a save writes one point per category: pptxtojson can leave a chart with values and fewer categories, or none
+      for (let n = Math.max(0, ...series.map(s => s.values.length)); cats.length < n;) cats.push(String(cats.length + 1))
       let colors = (e.colors || []).filter(Boolean)
       if (cx?.seriesColors?.some(Boolean)) colors = cx.seriesColors.map((c, i) => c || colors[i]).filter(Boolean)
       return {
