@@ -85,7 +85,8 @@ export function fillXml (fill, ctx, opacity = 1, box) {
   if (fill.type === 'image') {
     const rid = ctx?.blip ? ctx.blip(fill.src) : null
     if (!rid) return '<a:noFill/>'
-    const alpha = fill.alpha !== undefined && fill.alpha < 1 ? `<a:alphaModFix amt="${pct1(fill.alpha)}"/>` : ''
+    const a = (fill.alpha ?? 1) * opacity
+    const alpha = a < 1 ? `<a:alphaModFix amt="${pct1(a)}"/>` : ''
     if (fill.mode === 'tile') return `<a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="${rid}">${alpha}</a:blip><a:srcRect/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>`
     // "cover" crops the picture to the box like CSS background-size: cover
     let src = '<a:srcRect/>'

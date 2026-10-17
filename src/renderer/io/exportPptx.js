@@ -432,9 +432,11 @@ async function grpXml (el, c, off) {
   const id = c.id()
   c.targets.set(el.id, { spid: id, sp: false })
   let kids = ''
-  for (const ch of el.children || []) kids += await elXml(ch, c, { x: off.x + el.x, y: off.y + el.y })
+  // a group has no transparency of its own in PowerPoint: its children carry it
+  const op = el.opacity ?? 1
+  for (const ch of el.children || []) kids += await elXml(op < 1 ? { ...ch, opacity: (ch.opacity ?? 1) * op } : ch, c, { x: off.x + el.x, y: off.y + el.y })
   if (!kids) { c.targets.delete(el.id); return '' }
-  return `<p:grpSp><p:nvGrpSpPr>${cNvPr(el, c, id)}<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${xfrmXml(el, { off, child: true })}</p:grpSpPr>${kids}</p:grpSp>`
+  return `<p:grpSp><p:nvGrpSpPr>${cNvPr(el, c, id)}<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${xfrmXml(el, { off, child: true })}${effectsXml(el, c)}</p:grpSpPr>${kids}</p:grpSp>`
 }
 async function elXml (el, c, off = { x: 0, y: 0 }) {
   switch (el.type) {
