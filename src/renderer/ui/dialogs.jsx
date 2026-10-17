@@ -539,7 +539,7 @@ function AboutDlg () {
           <div class="about-name">Prizma</div>
           <div class="about-v">Version {v}</div>
           <p>A presentation studio for Windows. Opens and saves PowerPoint files (.pptx), and keeps everything in its own .prizma format too.</p>
-          <p class="fe-note">Made for Marko Veselinović. Built with Electron, Preact, pptxtojson, PDF.js, JSZip, DOMPurify, immer and Lucide icons — thank you to their authors. Fonts: Manrope and Unbounded (SIL Open Font License).</p>
+          <p class="fe-note">Created and vibe-coded by Marko Veselinović. Built with Electron, Preact, pptxtojson, PDF.js, JSZip, DOMPurify, immer and Lucide icons. Thank you to their authors. Fonts: Manrope and Unbounded (SIL Open Font License).</p>
         </div>
       </div>
     </Dialog>

@@ -28,6 +28,7 @@
 .bs-sep { height: 1px; margin: 8px 10px; background: var(--line); flex: none; }
 .bs-brand { display: flex; align-items: center; gap: 9px; padding: 10px 12px 2px; color: var(--text-2); font: 600 13px var(--brand); letter-spacing: .01em; }
 .bs-brand img { width: 22px; height: 22px; }
+.bs-brand small { display: block; color: var(--text-3); font: 500 11px var(--font); letter-spacing: 0; }
 
 /* main area: corner glows and faint contour lines */
 .bs-main {

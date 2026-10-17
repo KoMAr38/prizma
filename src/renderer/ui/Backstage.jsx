@@ -47,7 +47,7 @@ export function Backstage () {
         <button class="bs-back" onClick={() => { backstage.value = null }} data-tip="Back to the presentation" disabled={!doc.value}><Icon name="arrow-left" size={20} /></button>
         {NAV.map((n, i) => n ? <button key={n[0]} class={'bs-item' + (page === n[0] ? ' on' : '')} onClick={() => go(n[0])}><Icon name={n[2]} size={17} />{n[1]}</button> : <div key={'s' + i} class="bs-sep" />)}
         <span class="rtabs-fill" />
-        <div class="bs-brand"><img src="mark.svg" alt="" /><span>Prizma</span></div>
+        <div class="bs-brand"><img src="mark.svg" alt="" /><span>Prizma<small>Vibe-coded by Marko&nbsp;Veselinović</small></span></div>
       </nav>
       <main class="bs-main"><P /></main>
     </div>
