@@ -59,4 +59,15 @@ module.exports = async ({ page, ev, wait, errors, OUT }) => {
     // a guide Prizma can't work out (at2) never leaves a path of NaNs
     check(d && d.path === null, 'a path with a value that is not a number is not used: ' + d?.path)
   })
+
+  await sec('flipped groups', async () => {
+    // G1 (288 x 144 pt) is flipped left-right and holds A (turned 30°) and group B; G2 is upside down and turned 90°
+    const els = (await open('flipped-groups.pptx')).doc.slides[0].elements
+    const find = (l, n) => { for (const e of l) { const f = e.name === n ? e : e.children && find(e.children, n); if (f) return f } }
+    const at = n => { const e = find(els, n); return e && [e.x, e.y, e.rot].map(Math.round).concat(!!e.flipH, !!e.flipV).join() }
+    check(at('G1') === '72,72,0,false,false' && at('G2') === '432,288,90,false,false', 'flipped groups keep their place and turn, without a flip: ' + [at('G1'), at('G2')].join(' / '))
+    check(at('A') === '216,0,330,true,false' && at('E') === '0,108,0,true,false', 'a flipped group\'s shapes are mirrored in it: ' + [at('A'), at('E')].join(' / '))
+    check(at('B') === '0,72,0,false,false' && at('C') === '108,0,0,true,false' && at('C2') === '0,36,0,true,false', 'and so are the shapes of a group inside it: ' + ['B', 'C', 'C2'].map(at).join(' / '))
+    check(at('D') === '0,108,0,false,true' && at('D2') === '108,0,0,false,true', 'upside down too: ' + [at('D'), at('D2')].join(' / '))
+  })
 }

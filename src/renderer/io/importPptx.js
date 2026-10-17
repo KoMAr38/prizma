@@ -866,6 +866,13 @@ function fixHtml (html, shapeInfo, fixHref) {
 // presets pptxtojson draws wrong (or flat where PowerPoint shades them): Prizma draws these itself, as PowerPoint does
 const OWN_DRAWN = new Set(['halfFrame', 'bevel', 'can', 'cube', 'flowChartMultidocument', 'flowChartMagneticDisk', 'flowChartMagneticDrum', 'flowChartDisplay', 'wedgeEllipseCallout',
   'parallelogram', 'plus', 'rightArrow', 'leftArrow', 'upArrow', 'downArrow', 'leftRightArrow', 'upDownArrow', 'star4', 'noSmoking', 'sun', 'cloud', 'cloudCallout'])
+// An element mirrored across its group's box, as actions.js flipEl flips a group's children
+function mirror (c, axis, g) {
+  if (axis === 'h') c.x = g.w - c.x - c.w; else c.y = g.h - c.y - c.h
+  if (c.rot) c.rot = 360 - c.rot
+  if (c.type !== 'group') { if (axis === 'h') c.flipH = !c.flipH; else c.flipV = !c.flipV; return }
+  for (const k of c.children) mirror(k, axis, c)
+}
 function convert (e, ctx) {
   let el
   try { el = convertEl(e, ctx) } catch (err) { console.warn('left out an object Prizma could not read', e?.type, err); return null } // one odd object must not stop the file from opening
@@ -1026,7 +1033,10 @@ function convertEl (e, ctx) {
     case 'group': case 'diagram': {
       const children = (e.elements || []).map(c => convert(c, ctx)).filter(Boolean)
       if (!children.length) return null
-      return { ...base, type: 'group', children }
+      // Prizma's groups carry no flip: a flipped group's children are mirrored instead and the group keeps its turn
+      const { flipH, flipV, ...g } = base
+      for (const c of children) { if (flipH) mirror(c, 'h', g); if (flipV) mirror(c, 'v', g) }
+      return { ...g, type: 'group', children }
     }
     default:
       return null
