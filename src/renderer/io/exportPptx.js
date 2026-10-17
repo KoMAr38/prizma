@@ -6,7 +6,7 @@ import { XML_HEAD, NS, NS_APR, esc, emu, emuPos, solidXml, fillXml, lineXml, eff
 import { parasXml, bodyPrXml, fontXml } from './pptx/text.js'
 import { chartPart } from './pptx/chart.js'
 import { transitionXml, timingXml } from './pptx/anim.js'
-import { mediaInfo, settings, appInfo } from '../core/store.js'
+import { mediaInfo, settings, appInfo, redraw } from '../core/store.js'
 import { imageSize } from '../core/actions.js'
 import { walk, luminance, ELEMENT_LABEL, solid } from '../core/model.js'
 import { SHAPES, shapeParts, pathDriven, linePath } from '../core/shapes.js'
@@ -81,22 +81,19 @@ function draw (src, w, h, paint) {
   else g.drawImage(src, 0, 0, c.width, c.height)
   return canvasPng(c)
 }
-// `side`: the longest side the picture is shown at, in points (vector art gets a fallback picture sharp at twice that)
-async function decodeImage (bytes, mime, side = 600) {
-  const blob = new Blob([bytes], { type: mime })
-  if (mime === 'image/svg+xml') {
-    const url = URL.createObjectURL(blob)
-    try {
-      const img = new Image()
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url })
-      const w = img.naturalWidth || 300, h = img.naturalHeight || 150
-      const k = Math.min(2000, Math.max(256, side * 8 / 3)) / Math.max(w, h)
-      return { w, h, png: await draw(img, w * k, h * k) }
-    } finally { URL.revokeObjectURL(url) }
-  }
-  const bmp = await createImageBitmap(blob)
-  return { w: bmp.width, h: bmp.height, bmp }
+// An SVG's fallback picture, sharp at twice `side`: the longest side it is shown at, in points
+async function svgPng (bytes, side = 600) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'image/svg+xml' }))
+  try {
+    const img = new Image()
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url })
+    const w = img.naturalWidth || 300, h = img.naturalHeight || 150
+    const k = Math.min(2000, Math.max(256, side * 8 / 3)) / Math.max(w, h)
+    return { w, h, png: await draw(img, w * k, h * k) }
+  } finally { URL.revokeObjectURL(url) }
 }
+// WebP, AVIF and other pictures PowerPoint can't read, converted once a session (the entry goes with the media's bytes)
+const converted = new WeakMap()
 // A frame of a video (and its length) for the poster PowerPoint shows before playback
 function probeMedia (bytes, mime, video) {
   return new Promise(resolve => {
@@ -144,16 +141,21 @@ class MediaStore {
       const sz = sized ? await imageSize(bytes, mime, url) : null
       return { name: this.put(bytes, known[0], known[1]), mime: known[1], svg: null, w: sz?.w || 0, h: sz?.h || 0 }
     }
-    // SVG keeps its vector original next to a PNG; WebP and other formats become PNG
+    // WebP, AVIF …: a JPEG, or a PNG when see-through (a 5 MB WebP photo became a 32 MB PNG on every save).
+    // A picture nothing can read is left out rather than breaking the file
+    if (mime !== 'image/svg+xml') {
+      if (!converted.has(bytes)) converted.set(bytes, redraw(bytes, mime).catch(() => null))
+      const cv = await converted.get(bytes)
+      return cv && { name: this.put(cv.bytes, IMG[cv.mime][0], cv.mime), mime: cv.mime, svg: null, w: cv.w, h: cv.h }
+    }
+    // SVG keeps its vector original next to a PNG
     try {
-      const dec = await decodeImage(bytes, mime, side)
-      const png = dec.png || await draw(dec.bmp, dec.w, dec.h)
-      dec.bmp?.close?.()
-      if (!png) return null
-      const svg = mime === 'image/svg+xml' ? this.put(bytes, 'svg', 'image/svg+xml') : null
-      return { name: this.put(png, 'png', 'image/png'), mime: 'image/png', svg, w: dec.w, h: dec.h }
+      const dec = await svgPng(bytes, side)
+      if (!dec.png) return null
+      const svg = this.put(bytes, 'svg', 'image/svg+xml')
+      return { name: this.put(dec.png, 'png', 'image/png'), mime: 'image/png', svg, w: dec.w, h: dec.h }
     } catch (e) {
-      return null // a picture nothing can read is left out rather than breaking the file
+      return null
     }
   }
   // sized: the picture fills a shape, a cell or the background
