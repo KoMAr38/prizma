@@ -3,7 +3,7 @@ import { computed, signal } from '@preact/signals'
 import {
   doc, slide, slideIdx, selection, editing, editCell, slideSel, selected, canUndo, canRedo, undo, redo, zoom, fitZoom, view, ribbonTab,
   ribbonCollapsed, backstage, pane, formatTab, showNotes, showRuler, showGrid, showGuides, snapGrid, settings, native, painter, fmtTick,
-  docVersion, focusArea, tool, cropMode, openDialog, toast, select, goSlide, finishEditing, editorReq, theme as themeSig, searchOpen, update, grayscale
+  docVersion, focusArea, tool, cropMode, openDialog, toast, select, goSlide, finishEditing, editorReq, theme as themeSig, searchOpen, update, grayscale, setSetting
 } from '../core/store.js'
 import * as A from '../core/actions.js'
 import { richState, stepSize } from '../core/html.js'
@@ -131,12 +131,8 @@ def('para.vMiddle', { label: 'Align text middle', icon: 'align-vertical-justify-
 def('para.vBottom', { label: 'Align text bottom', icon: 'align-vertical-justify-end', run: () => A.setProps({ vAlign: 'bottom' }), checked: () => fmtState.value?.vAlign === 'bottom' })
 
 // ---------------- clipboard & editing ----------------
-def('edit.undo', { label: 'Undo', icon: 'undo-2', keys: 'Ctrl+Z', run: () => { finishEditingForHistory(); undo() }, enabled: () => canUndo.value, global: true })
-def('edit.redo', { label: 'Redo', icon: 'redo-2', keys: 'Ctrl+Y', alt: ['Ctrl+Shift+Z'], run: () => { finishEditingForHistory(); redo() }, enabled: () => canRedo.value, global: true })
-function finishEditingForHistory () {
-  const ed = document.querySelector('[data-editor]')
-  if (ed && ed._pzCommit) ed._pzCommit()
-}
+def('edit.undo', { label: 'Undo', icon: 'undo-2', keys: 'Ctrl+Z', run: () => { F.finishEditingSoft(); undo() }, enabled: () => canUndo.value, global: true })
+def('edit.redo', { label: 'Redo', icon: 'redo-2', keys: 'Ctrl+Y', alt: ['Ctrl+Shift+Z'], run: () => { F.finishEditingSoft(); redo() }, enabled: () => canRedo.value, global: true })
 def('edit.cut', { label: 'Cut', icon: 'scissors', keys: 'Ctrl+X', run: () => { if (isEditingText()) { document.execCommand('cut'); return } if (focusArea.value === 'thumbs') A.copySlides(slideIds(), true); else A.copySelection(true) } })
 def('edit.copy', { label: 'Copy', icon: 'copy', keys: 'Ctrl+C', run: () => { if (isEditingText()) { document.execCommand('copy'); return } if (focusArea.value === 'thumbs') A.copySlides(slideIds()); else A.copySelection() } })
 def('edit.paste', { label: 'Paste', icon: 'clipboard-paste', keys: 'Ctrl+V', run: () => { if (isEditingText()) { pasteText(); return } A.pasteFromClipboard() } })
@@ -169,8 +165,8 @@ def('slide.moveUp', { label: 'Move slide up', icon: 'arrow-up', run: () => { con
 def('slide.moveDown', { label: 'Move slide down', icon: 'arrow-down', run: () => { const { ids, last } = slideSpan(); if (last < doc.value.slides.length - 1) A.moveSlides(ids, last + 2) } })
 
 // ---------------- objects ----------------
-def('obj.group', { label: 'Group', icon: 'group', keys: 'Ctrl+G', run: () => A.groupSelected(), enabled: () => selection.value.length > 1 })
-def('obj.ungroup', { label: 'Ungroup', icon: 'ungroup', keys: 'Ctrl+Shift+G', run: () => A.ungroupSelected(), enabled: () => selected.value.some(e => e.type === 'group') })
+def('obj.group', { label: 'Group', icon: 'group', keys: 'Ctrl+G', run: () => A.groupSelected(), enabled: () => A.topSelected().length > 1 })
+def('obj.ungroup', { label: 'Ungroup', icon: 'ungroup', keys: 'Ctrl+Shift+G', run: () => A.ungroupSelected(), enabled: () => A.topSelected().some(e => e.type === 'group') })
 def('obj.front', { label: 'Bring to front', icon: 'bring-to-front', keys: 'Ctrl+Shift+]', run: () => A.arrange('front'), enabled: hasSel })
 def('obj.forward', { label: 'Bring forward', icon: 'arrow-up-from-line', run: () => A.arrange('forward'), enabled: hasSel })
 def('obj.back', { label: 'Send to back', icon: 'send-to-back', keys: 'Ctrl+Shift+[', run: () => A.arrange('back'), enabled: hasSel })
@@ -207,16 +203,27 @@ const openDrop = (tab, tip) => { ribbonTab.value = tab; setTimeout(() => documen
 def('ins.shapes', { label: 'Shapes', icon: 'shapes', tags: 'rectangle circle arrow star', run: () => openDrop('insert', 'Insert shapes') })
 def('ins.wordart', { label: 'WordArt', icon: 'pilcrow', tags: 'fancy text effects', run: () => openDrop('insert', 'WordArt') })
 def('ins.comment', { label: 'New comment', icon: 'message-square-plus', keys: 'Ctrl+Alt+M', run: () => { pane.value = 'comments'; setTimeout(() => document.querySelector('.cm-new textarea')?.focus(), 60) } })
+const PICTURES = { name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'] }
 export async function pickPictures () {
-  const paths = await native.openDialog({ title: 'Insert picture', multi: true, filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'] }, { name: 'All files', extensions: ['*'] }] })
+  const paths = await native.openDialog({ title: 'Insert picture', multi: true, filters: [PICTURES, { name: 'All files', extensions: ['*'] }] })
   for (const p of paths || []) await insertPictureFile(p)
+}
+// A picture file as the slide shows it (a big photo made smaller); null, after telling the user, when it can't be shown
+export async function readPicture (p) {
+  const pic = await A.loadPicture(await native.readFile(p), mimeOf(p))
+  if (!pic) A.cantShowPicture(p.split(/[\\/]/).pop())
+  return pic
+}
+// The picture chosen in an open dialog, read as readPicture does; null when none
+export async function pickPicture (title) {
+  const paths = await native.openDialog({ title, filters: [PICTURES] })
+  return paths?.[0] ? readPicture(paths[0]) : null
 }
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', avif: 'image/avif', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/mp4', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac' }
 export const mimeOf = p => MIME[F.extOf(p)] || 'application/octet-stream'
 export async function insertPictureFile (p, box) {
-  const pic = await A.loadPicture(await native.readFile(p), mimeOf(p))
-  if (!pic) return A.cantShowPicture(p.split(/[\\/]/).pop())
-  return A.insertImageBytes(pic.bytes, pic.mime, pic.w, pic.h, box)
+  const pic = await readPicture(p)
+  return pic && A.insertImageBytes(pic.bytes, pic.mime, pic.w, pic.h, box)
 }
 async function pickMedia (kind) {
   const paths = await native.openDialog({ title: kind === 'video' ? 'Insert video' : 'Insert audio', filters: [kind === 'video' ? { name: 'Video', extensions: ['mp4', 'm4v', 'webm', 'mov'] } : { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac'] }] })
@@ -251,13 +258,12 @@ def('view.animPane', { label: 'Animation pane', icon: 'list-video', run: () => {
 def('view.collapseRibbon', { label: 'Collapse the ribbon', icon: 'chevrons-up', keys: 'Ctrl+F1', run: () => { ribbonCollapsed.value = !ribbonCollapsed.value }, checked: () => ribbonCollapsed.value, global: true })
 def('view.newWindow', { label: 'New window', icon: 'app-window', run: () => native.newWindow(null) })
 def('view.gray', { label: 'Grayscale', icon: 'contrast', tags: 'black and white grey', run: () => { grayscale.value = !grayscale.value }, checked: () => grayscale.value })
-def('view.spelling', { label: 'Check spelling as you type', icon: 'spell-check', tags: 'spelling proofing', run: () => { const v = settings.value.spellcheck === false; settings.value = { ...settings.value, spellcheck: v }; native?.setSettings({ spellcheck: v }) }, checked: () => settings.value.spellcheck !== false })
+def('view.spelling', { label: 'Check spelling as you type', icon: 'spell-check', tags: 'spelling proofing', run: () => setSetting({ spellcheck: settings.value.spellcheck === false }), checked: () => settings.value.spellcheck !== false })
 // the interface on screen: "Same as Windows" resolves to whatever Windows uses now
 export const uiShown = signal('dark')
 def('view.uiTheme', { label: 'Switch light/dark interface', icon: 'sun-moon', tags: 'dark mode light mode night', run: () => setUiTheme(uiShown.value === 'dark' ? 'light' : 'dark') })
 export function setUiTheme (t) {
-  settings.value = { ...settings.value, theme: t }
-  native?.setSettings({ theme: t })
+  setSetting({ theme: t })
   applyUiTheme()
 }
 export function applyUiTheme () {
@@ -274,7 +280,7 @@ def('design.bg', { label: 'Format background', icon: 'paint-bucket', run: () => 
 // ---------------- slide show ----------------
 def('show.start', { label: 'From beginning', icon: 'play', keys: 'F5', tags: 'slide show play present start', run: () => import('../show/launch.js').then(m => m.startShow(firstShown())), global: true })
 def('show.current', { label: 'From current slide', icon: 'presentation', keys: 'Shift+F5', run: () => import('../show/launch.js').then(m => m.startShow(slideIdx.value)), global: true })
-def('show.presenter', { label: 'Presenter view', icon: 'monitor-speaker', keys: 'Alt+F5', run: () => import('../show/launch.js').then(m => m.startShow(slideIdx.value, { presenter: true, force: true })), global: true })
+def('show.presenter', { label: 'Presenter view', icon: 'monitor-speaker', keys: 'Alt+F5', run: () => import('../show/launch.js').then(m => m.startShow(slideIdx.value, { presenter: true })), global: true })
 def('show.transitions', { label: 'Transitions', icon: 'sparkles', tags: 'slide transition morph fade', run: () => { ribbonTab.value = 'transitions' } })
 def('show.rehearse', { label: 'Rehearse timings', icon: 'timer', tags: 'practice stopwatch timer', run: () => import('../show/launch.js').then(m => m.startShow(firstShown(), { rehearse: true })) })
 // From beginning starts at the first slide that isn't hidden, as in PowerPoint
@@ -315,14 +321,13 @@ export function comboOf (e) {
   return (e.ctrlKey || e.metaKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + keyName(e)
 }
 const KEYMAP = new Map()
-const norm = k => k.replace(/Ctrl\+Alt\+Shift|Ctrl\+Shift\+Alt/, 'Ctrl+Alt+Shift')
 export function buildKeymap () {
   KEYMAP.clear()
   for (const c of Object.values(CMDS)) for (const k of [c.keys, ...(c.alt || [])].filter(Boolean)) {
     // combos are stored as Ctrl+Alt+Shift+Key, whatever order the command lists them in
     const parts = k.split('+'); const key = parts.pop()
     const kk = (parts.includes('Ctrl') ? 'Ctrl+' : '') + (parts.includes('Alt') ? 'Alt+' : '') + (parts.includes('Shift') ? 'Shift+' : '') + (key.length === 1 ? key.toUpperCase() : key)
-    KEYMAP.set(norm(kk), c.id)
+    KEYMAP.set(kk, c.id)
   }
 }
 export const commandForKey = e => KEYMAP.get(comboOf(e)) || null

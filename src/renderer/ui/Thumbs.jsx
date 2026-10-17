@@ -65,7 +65,7 @@ export function Thumbs ({ width }) {
       return
     }
     if (!sel.includes(s.id) || sel.length === 1) { goSlide(i); slideSel.value = [s.id] } else { finishEditing(); slideIdx.value = i; select([]) }
-    dragRef.current = { i, y: e.clientY, active: false, ids: sel.includes(s.id) ? sel : [s.id] }
+    dragRef.current = { i, id: s.id, y: e.clientY, active: false, ids: sel.includes(s.id) ? sel : [s.id] }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onMove = e => {
@@ -85,6 +85,7 @@ export function Thumbs ({ width }) {
     const g = dragRef.current
     dragRef.current = null
     if (g && g.active && dragI !== null) A.moveSlides(g.ids, dragI)
+    else if (g && !g.active) slideSel.value = [g.id] // a click that didn't drag selects just the clicked slide
     setDragI(null)
   }
   const menu = (e, i) => {

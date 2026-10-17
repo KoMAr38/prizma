@@ -203,4 +203,17 @@ module.exports = async ({ app, page, ev, wait, errors, OUT, shot }) => {
   const back = await ev(`__pz.store.doc.value.slides.map(s => ({ c: (s.comments || []).map(c => c.author + ':' + c.text).join(','), l: s.elements.map(e => e.link ? JSON.stringify(e.link) : '').join(''), n: s.elements.map(e => e.name || '').join('') }))`)
   check(JSON.stringify(before) === JSON.stringify(back), 'links, comments and names survive .pptx')
   if (JSON.stringify(before) !== JSON.stringify(back)) console.log(JSON.stringify(before), '\n', JSON.stringify(back))
+
+  // ---------- sizes typed in the Size boxes, and one action as one undo step ----------
+  const sz = await ev(`(() => { const A = __pz.actions, S = __pz.store; A.addSlide('blank'); S.updateSlide(s => { s.elements = [] })
+    const el = id => S.slide.value.elements.find(e => e.id === id)
+    const l = A.insertLine('straight', { x: 100, y: 400 }, { x: 300, y: 400 }); A.setProps({ lockAspect: true }, [l.id]); A.setSize([l.id], 'h', 20)
+    const line = [el(l.id).w, el(l.id).h]
+    const ids = [0, 1, 2].map(i => A.insertShape('rect', { x: 100 + i * 120, y: 200, w: 100, h: 40 }).id)
+    A.setSize(ids, 'h', 60); const hs = ids.map(id => el(id).h); S.undo(); const back = ids.map(id => el(id).h)
+    S.oneStep(() => { A.setFill({ type: 'solid', color: '#3B82F6' }, ids); A.setProps({ shadow: { blur: 4, dist: 3, dir: 45, color: '#000000', alpha: 0.4 } }, ids) }); S.undo()
+    return { line, hs, back, plain: ids.every(id => !el(id).shadow && el(id).fill?.color !== '#3B82F6') } })()`)
+  check(sz.line.join() === '200,20', 'a typed height on a locked straight line (height 0) keeps its width: ' + sz.line.join('×'))
+  check(sz.hs.join() === '60,60,60' && sz.back.join() === '40,40,40', 'a height typed for three objects sets all three, as one undo step: ' + JSON.stringify(sz))
+  check(sz.plain, 'a fill and a shadow set as one action (oneStep) come back with one undo')
 }

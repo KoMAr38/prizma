@@ -1,14 +1,13 @@
 // Document operations used by the ribbon, menus, keyboard shortcuts and panes.
 import { batch } from '@preact/signals'
-import { current } from 'immer'
 import {
   doc, slide, slideIdx, selection, editing, editCell, slideSel, update, updateSlide, updateEls, select, goSlide,
-  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, tool, pane, formatTab, painter, settings, appInfo, theme as themeSig
+  selected, toast, addMedia, mediaInfo, bytesToBase64, dataUrlToBytes, live, painter, settings, appInfo, theme as themeSig
 } from './store.js'
 import {
-  uid, findEl, walk, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, hexColor, onSlide, parentFrame, rotatePt, refitGroup, mapSlideLinks, cssColor
+  uid, findEl, walk, parentGroups, cloneEl, bounds, unionBounds, textBox, shapeEl, lineEl, imageEl, tableEl, chartEl, iconEl, mediaEl, solid, onSlide, parentFrame, rotatePt, mapSlideLinks, cssColor, removeEls
 } from './model.js'
-import { newSlide, layoutPlaceholders, makeDocTheme, themeById, layoutKind, THEMES } from './themes.js'
+import { newSlide, layoutPlaceholders, makeDocTheme, themeById, THEMES } from './themes.js'
 import { setRunStyleAll, setParaStyleAll, setBulletsAll, changeLevelAll, normalize, richState, isEmptyHtml, htmlFromText, textOf, replaceText, searchRe } from './html.js'
 import { SHAPES } from './shapes.js'
 
@@ -296,6 +295,8 @@ export function insertSymbol (ch) {
 }
 
 const isTop = (s, id) => s.elements.some(e => e.id === id)
+// The selected objects that sit on the slide itself: what Group and Ungroup work on
+export const topSelected = () => (slide.value?.elements || []).filter(e => selection.value.includes(e.id))
 // Selected ids reduced to those sharing a container (so group operations stay sane)
 export function topSelection () {
   const s = slide.value
@@ -307,17 +308,7 @@ export function topSelection () {
 export function deleteSelected () {
   const ids = selection.value
   if (!ids.length) return
-  update(d => {
-    const s = d.slides[curIdx()]
-    const kill = list => list.filter(e => { if (ids.includes(e.id)) return false; if (e.children) e.children = kill(e.children); return true })
-    s.elements = kill(s.elements)
-    // drop now-empty groups and animations of removed elements; a group that lost a child closes around the rest
-    s.elements = s.elements.filter(e => e.type !== 'group' || e.children.length)
-    const refit = list => list.forEach(e => { if (e.type === 'group' && e.children.length) { refit(e.children); refitGroup(e) } })
-    refit(s.elements)
-    const all = new Set(); walk(s.elements, e => { all.add(e.id) })
-    s.animations = (s.animations || []).filter(a => all.has(a.el))
-  })
+  update(d => { removeEls(d.slides[curIdx()], ids) })
   select([])
 }
 export function duplicateSelected (offset = 12) {
@@ -331,12 +322,17 @@ export function duplicateSelected (offset = 12) {
 }
 export function selectAll () {
   const s = slide.value
-  if (s) select(s.elements.map(e => e.id))
+  if (s) select(s.elements.filter(e => !e.hidden).map(e => e.id))
+}
+// The selection with id added; the groups around it and the objects inside it leave (a drag would move them twice)
+export function addToSelection (sel, id) {
+  const s = slide.value, around = parentGroups(s, id).map(g => g.id)
+  return [...sel.filter(x => !around.includes(x) && !parentGroups(s, x).some(g => g.id === id)), id]
 }
 
 // ---------------- clipboard ----------------
 const clip = { at: 0, text: '', payload: null }
-function collectMedia (els) {
+async function collectMedia (els) {
   const ids = new Set()
   const scan = e => {
     if (e.src) ids.add(e.src); if (e.poster) ids.add(e.poster); if (e.fill?.src) ids.add(e.fill.src); e.children?.forEach(scan)
@@ -344,29 +340,28 @@ function collectMedia (els) {
   }
   els.forEach(scan)
   const out = {}
-  for (const id of ids) { const m = mediaInfo(id); if (m) out[id] = { mime: m.mime, b64: m.bytes.length < 30e6 ? bytesToBase64(m.bytes) : null } }
+  await Promise.all([...ids].map(async id => { const m = mediaInfo(id); if (m) out[id] = { mime: m.mime, b64: m.bytes.length < 30e6 ? await bytesToBase64(m.bytes).catch(() => null) : null } }))
   return out
 }
 const WIN = uid('w')
+// A cut removes the objects at once: writing the clipboard takes a while, and the selection may change meanwhile
 export async function copySelection (cut = false) {
   const s = slide.value
   const els = topSelection().map(id => findEl(s, id)?.el).filter(Boolean)
   if (!els.length) return false
   const flat = els.map(e => JSON.parse(JSON.stringify(onSlide(s, e)))) // group children as they show on the slide
-  const payload = { kind: 'elements', win: WIN, elements: flat, media: collectMedia(els), slideId: s.id }
-  await writeClipboard(payload, els.map(e => textOf(e.html || '')).filter(Boolean).join('\n'))
+  const media = collectMedia(els)
   if (cut) deleteSelected()
+  await writeClipboard({ kind: 'elements', win: WIN, elements: flat, media: await media, slideId: s.id }, els.map(e => textOf(e.html || '')).filter(Boolean).join('\n'))
   return true
 }
 export async function copySlides (ids, cut = false) {
   const d = doc.value
   const slides = d.slides.filter(s => ids.includes(s.id))
   if (!slides.length) return
-  const els = slides.flatMap(s => [...s.elements, ...(s.master || [])])
-  const payload = { kind: 'slides', win: WIN, slides: JSON.parse(JSON.stringify(slides)), media: collectMedia(els), size: d.size }
-  if (slides.some(s => s.bg?.src)) Object.assign(payload.media, collectMedia(slides.map(s => ({ fill: s.bg }))))
-  await writeClipboard(payload, slides.map(s => s.elements.map(e => textOf(e.html || '')).join('\n')).join('\n\n'))
+  const media = collectMedia(slides.flatMap(s => [...s.elements, ...(s.master || []), ...(s.bg ? [{ fill: s.bg }] : [])]))
   if (cut) deleteSlides(ids)
+  await writeClipboard({ kind: 'slides', win: WIN, slides: JSON.parse(JSON.stringify(slides)), media: await media, size: d.size }, slides.map(s => s.elements.map(e => textOf(e.html || '')).join('\n')).join('\n\n'))
 }
 async function writeClipboard (payload, text) {
   clip.at = Date.now(); clip.text = text || ' '; clip.payload = payload
@@ -457,10 +452,9 @@ function pastePayload (payload) {
 
 // ---------------- grouping & arrangement ----------------
 export function groupSelected () {
-  const s = slide.value
-  const ids = selection.value.filter(id => isTop(s, id))
-  if (ids.length < 2) return
-  const els = s.elements.filter(e => ids.includes(e.id))
+  const els = topSelected()
+  if (els.length < 2) return
+  const ids = els.map(e => e.id)
   const b = unionBounds(els)
   const g = { id: uid(), type: 'group', name: 'Group', x: b.x, y: b.y, w: b.w, h: b.h, rot: 0, children: els.map(e => ({ ...JSON.parse(JSON.stringify(e)), x: e.x - b.x, y: e.y - b.y })) }
   updateSlide(sl => {
@@ -472,27 +466,18 @@ export function groupSelected () {
 }
 export function ungroupSelected () {
   const s = slide.value
-  const groups = selection.value.map(id => s.elements.find(e => e.id === id && e.type === 'group')).filter(Boolean)
+  const groups = topSelected().filter(e => e.type === 'group')
   if (!groups.length) return
   const newIds = []
   updateSlide(sl => {
     for (const g of groups) {
       const i = sl.elements.findIndex(e => e.id === g.id)
-      const kids = g.children.map(c => {
-        const k = JSON.parse(JSON.stringify(c))
-        k.x = g.x + c.x; k.y = g.y + c.y // children are stored in the group's own frame, unscaled
-        if (g.rot) {
-          const gc = { x: g.x + g.w / 2, y: g.y + g.h / 2 }, cc = { x: k.x + k.w / 2, y: k.y + k.h / 2 }
-          const a = g.rot * Math.PI / 180, dx = cc.x - gc.x, dy = cc.y - gc.y
-          k.x = gc.x + dx * Math.cos(a) - dy * Math.sin(a) - k.w / 2
-          k.y = gc.y + dx * Math.sin(a) + dy * Math.cos(a) - k.h / 2
-          k.rot = ((k.rot || 0) + g.rot) % 360
-        }
-        newIds.push(k.id)
-        return k
-      })
+      const kids = g.children.map(c => JSON.parse(JSON.stringify(onSlide(s, c)))) // children are stored in the group's own frame
+      newIds.push(...kids.map(k => k.id))
       sl.elements.splice(i, 1, ...kids)
     }
+    // an animation of a group that is gone would point at nothing
+    sl.animations = (sl.animations || []).filter(a => !groups.some(g => g.id === a.el))
   })
   select(newIds)
 }
@@ -574,6 +559,18 @@ export function setGeometry (id, g, opts) {
     if (g.w !== undefined || g.h !== undefined) resizeEl(e, g.w ?? e.w, g.h ?? e.h)
     Object.assign(e, g)
   }, opts)
+}
+// A size typed in the Size boxes. One object keeps its aspect when locked; several scale together, as one undo step.
+// A side of length 0 (a straight line's height) can't be scaled: it takes the typed value.
+export function setSize (ids, k, v) {
+  const s = slide.value, els = ids.map(id => findEl(s, id)?.el).filter(Boolean)
+  if (!els.length || !v) return
+  const o = k === 'w' ? 'h' : 'w', b = els.length === 1 ? els[0] : unionBounds(els)
+  updateEls(els.map(e => e.id), e => {
+    const n = { [k]: els.length === 1 || !b[k] ? v : e[k] * v / b[k] }
+    if (els.length === 1 && (e.lockAspect || e.type === 'image') && e[k] && e[o]) n[o] = e[o] * v / e[k]
+    resizeEl(e, n.w ?? e.w, n.h ?? e.h)
+  })
 }
 // A new size for an element, with its content following: a group's children, a table's columns and rows, and an
 // imported outline (kept rather than swapped for the preset shape). Dragging, the Size boxes and Shift+arrows use it.
@@ -798,6 +795,3 @@ export function applyFormat (id) {
   })
   painter.value = null
 }
-
-// ---------------- helpers for the UI ----------------
-export { hexColor, current }

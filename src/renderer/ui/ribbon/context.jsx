@@ -1,10 +1,11 @@
 // Contextual tabs: Shape Format, Picture Format, Table Design, Table Layout, Chart Design, Playback.
-import { slide, selection, selected, editCell, tool, theme as themeSig, openDialog, updateEl, cropMode, mediaUrl, lastColors, mediaPlaying, finishEditing } from '../../core/store.js'
+import { slide, selection, selected, editCell, tool, theme as themeSig, openDialog, updateEl, cropMode, mediaUrl, lastColors, mediaPlaying, finishEditing, addMedia } from '../../core/store.js'
 import { changePicture } from '../../editor/Stage.jsx'
+import { pickPicture } from '../../app/commands.js'
 import { hexColor, solid, round2, recrop, findEl } from '../../core/model.js'
 import { Group, Col, Row, Gallery, PickGrid, NumField, Check, ColorBtn, unitFmt, unitParse, addRecentColor } from '../controls.jsx'
 import {
-  Btn, Drop, Split, Icon, runCmd, A, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker, QuickStylesGallery, FillBtn, OutlineBtn, EffectsBtn,
+  Btn, Drop, Split, Icon, runCmd, cmdEnabled, A, ShapeIcon, RECENT_SHAPES, pickShape, ShapePicker, QuickStylesGallery, FillBtn, OutlineBtn, EffectsBtn,
   ArrangeGroup, alignMenu, rotateMenu, SizeFields, openFormat, outlineMenu, closePop, unitStep
 } from './common.jsx'
 import { FontColorBtn } from './home.jsx'
@@ -21,7 +22,7 @@ function ArrangeGroupFull () {
       <Col><ArrangeGroup /><Btn icon="layers" label="Selection pane" onClick={() => runCmd('view.selectionPane')} /></Col>
       <Col>
         <Drop icon="align-center-vertical" label="Align" disabled={dis} menu={alignMenu} />
-        <Drop icon="group" label="Group" disabled={dis} menu={() => [{ label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: selection.value.length < 2, run: () => runCmd('obj.group') }, { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !selected.value.some(e => e.type === 'group'), run: () => runCmd('obj.ungroup') }]} />
+        <Drop icon="group" label="Group" disabled={dis} menu={() => [{ label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: !cmdEnabled('obj.group'), run: () => runCmd('obj.group') }, { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !cmdEnabled('obj.ungroup'), run: () => runCmd('obj.ungroup') }]} />
         <Drop icon="rotate-cw" label="Rotate" disabled={dis} menu={rotateMenu} />
       </Col>
     </Group>
@@ -91,7 +92,7 @@ export const PIC_STYLES = [
   { label: 'Thick accent frame', line: { color: 'accent1', width: 8 } },
   { label: 'Center shadow', shadow: { dx: 0, dy: 0, blur: 16, alpha: 0.6 } },
   { label: 'Hexagon', geom: 'hexagon' },
-  { label: 'Plain', reset: true }
+  { label: 'Plain' }
 ]
 const applyPicStyle = st => {
   const ids = selected.value.filter(e => e.type === 'image').map(e => e.id)
@@ -171,7 +172,7 @@ function TablePreview ({ st }) {
   const fake = { rows: [1, 1, 1, 1], cols: [1, 1, 1], style: st }
   return (
     <span class="tbl-prev">
-      {[0, 1, 2, 3].map(r => <span key={r}>{[0, 1, 2].map(c => { const l = tableCellLook(fake, r, c); return <i key={c} style={{ background: l.fill ? hexColor(l.fill.includes('@') ? l.fill : l.fill, themeSig.value) : 'transparent', borderBottom: l.borders?.bottom ? `1px solid ${hexColor(l.borders.bottom.color, themeSig.value)}` : 'none' }} /> })}</span>)}
+      {[0, 1, 2, 3].map(r => <span key={r}>{[0, 1, 2].map(c => { const l = tableCellLook(fake, r, c); return <i key={c} style={{ background: l.fill ? hexColor(l.fill, themeSig.value) : 'transparent', borderBottom: l.borders?.bottom ? `1px solid ${hexColor(l.borders.bottom.color, themeSig.value)}` : 'none' }} /> })}</span>)}
     </span>
   )
 }
@@ -422,11 +423,8 @@ export function PlaybackTab () {
       {m?.type === 'video' && (
         <Group label="Poster frame">
           <Btn size="lg" icon="image" label="Poster image" desc="Show a picture of your choice before the video plays." onClick={async () => {
-            const p = await window.prizmaNative.openDialog({ title: 'Poster image', filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] })
-            if (!p?.[0]) return
-            const bytes = await window.prizmaNative.readFile(p[0])
-            const { addMedia } = await import('../../core/store.js')
-            set({ poster: addMedia(bytes, /png$/i.test(p[0]) ? 'image/png' : /webp$/i.test(p[0]) ? 'image/webp' : 'image/jpeg') })
+            const pic = await pickPicture('Poster image')
+            if (pic) set({ poster: addMedia(pic.bytes, pic.mime) })
           }} />
           <Btn size="lg" icon="image-off" label="Reset poster" disabled={!m.poster} onClick={() => set({ poster: null })} />
         </Group>

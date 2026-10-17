@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import {
-  backstage, doc, file, appInfo, settings, recovery, native, update, slideIdx
+  backstage, doc, file, appInfo, settings, recovery, native, update, slideIdx, setSetting
 } from '../core/store.js'
 import { THEMES } from '../core/themes.js'
 import { SLIDE_SIZES } from '../core/model.js'
@@ -296,7 +296,7 @@ function ExportPage () {
 }
 function OptionsPage () {
   const s = settings.value
-  const set = patch => { settings.value = { ...settings.value, ...patch }; native?.setSettings(patch); if ('autosaveMinutes' in patch) F.startAutosave() }
+  const set = patch => { setSetting(patch); if ('autosaveMinutes' in patch) F.startAutosave() }
   return (
     <div class="bs-page bs-options">
       <h1>Options</h1>

@@ -1,6 +1,6 @@
 // In-place rich text editor (contenteditable) for text boxes, shapes and table cells.
 import { useLayoutEffect, useRef } from 'preact/hooks'
-import { PX, DEFAULT_INSET, round2, findEl, rotatePt } from '../core/model.js'
+import { PX, DEFAULT_INSET, round2, findEl, rotatePt, removeEls } from '../core/model.js'
 import { normalize, isEmptyHtml, sanitize, searchRe, numberStarts, plainNumbers } from '../core/html.js'
 import { textRect } from '../core/shapes.js'
 import {
@@ -123,8 +123,10 @@ export function TextEditor ({ el, rtStyle }) {
       const html = plainNumbers(d.innerHTML)
       const fit = fitPatch(d, cur)
       if (html === last && !fit) return
+      // a fit alone (the box growing to its text, also right after a click with the Text box tool) joins the last step
+      const typed = html !== last
       last = html
-      updateEl(id, e => { e.html = html; if (fit) Object.assign(e, fit) }, { coalesce: 'edit:' + id })
+      updateEl(id, e => { e.html = html; if (fit) Object.assign(e, fit) }, typed ? { coalesce: 'edit:' + id } : { merge: true })
     }
     const commitSoon = raf(commit)
     const api = { el: d, get base () { return elRef.current.ts || {} }, commit: () => { commit(); fmtTick.value++ } }
@@ -267,11 +269,7 @@ export function finishText () {
   html = normalize(html)
   if (isEmptyHtml(html) && !el.ph && el.type === 'text' && !(el.fill && el.fill.type !== 'none') && !(el.line && el.line.width)) {
     const i = slideIdx.value
-    update(dd => {
-      const sl = dd.slides[i]
-      const kill = list => list.filter(e => { if (e.id === id) return false; if (e.children) e.children = kill(e.children); return true })
-      sl.elements = kill(sl.elements)
-    }, { merge: true })
+    update(dd => { removeEls(dd.slides[i], [id]) }, { merge: true })
     return
   }
   if (html !== el.html) updateEl(id, e => { e.html = html }, { merge: true })

@@ -116,6 +116,7 @@ export function fillCss (fill, mediaUrl) {
 export const DASHES = {
   solid: null, dash: [4, 3], dot: [1, 1], dashDot: [4, 3, 1, 3], longDash: [8, 3], longDashDot: [8, 3, 1, 3], sysDash: [3, 1], sysDot: [1, 1]
 }
+export const DASH_LABEL = { solid: 'Solid', dash: 'Dash', dot: 'Round dot', dashDot: 'Dash dot', longDash: 'Long dash', longDashDot: 'Long dash dot', sysDash: 'Square dot', sysDot: 'Dot' }
 export const ARROWS = ['none', 'triangle', 'arrow', 'stealth', 'diamond', 'oval']
 
 // ---------- element factories ----------
@@ -266,6 +267,22 @@ export function refitGroup (g) {
   const d = rotatePt({ x: b.x + b.w / 2 - g.w / 2, y: b.y + b.h / 2 - g.h / 2 }, { x: 0, y: 0 }, g.rot || 0)
   for (const c of g.children) { c.x -= b.x; c.y -= b.y }
   g.x += g.w / 2 + d.x - b.w / 2; g.y += g.h / 2 + d.y - b.h / 2; g.w = b.w; g.h = b.h
+}
+// Removes elements from a slide, at any depth, with the groups they leave empty and their animations; a group that
+// lost a child closes around the rest
+export function removeEls (s, ids) {
+  const kill = list => list.filter(e => {
+    if (ids.includes(e.id)) return false
+    if (!e.children) return true
+    const kept = kill(e.children)
+    if (kept.length < e.children.length) e.children = kept
+    return kept.length > 0
+  })
+  s.elements = kill(s.elements)
+  const refit = list => list.forEach(e => { if (e.type === 'group') { refit(e.children); refitGroup(e) } })
+  refit(s.elements)
+  const all = new Set(); walk(s.elements, e => { all.add(e.id) })
+  s.animations = (s.animations || []).filter(a => all.has(a.el))
 }
 // Links to a slide name the slide (its id), so they follow it when slides move.
 // mapSlideLinks sends every slide link (on objects and inside text) through `to`; no answer drops an object's link.

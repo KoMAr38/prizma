@@ -195,4 +195,34 @@ module.exports = async ({ page, ev, wait, errors }) => {
     const a1 = await elBox(r.a)
     check(s === r.a && t === 50 && near({ x: a1.cx, y: a1.cy }, { x: a0.cx - 60, y: a0.cy + 30 }, 2), `a box two turned groups deep (${t}°) is reached by clicking in and follows the pointer: ${fmt({ x: a1.cx - a0.cx, y: a1.cy - a0.cy })} for (-60, 30)`)
   })
+
+  // ungroup, flip and delete on two turned groups: every object stays (or mirrors) where the slide shows it
+  await sec('structure', async () => {
+    await fresh()
+    const r = await ev(`(() => { const A = __pz.actions, S = __pz.store
+      const a = A.insertShape('rect', { x: 200, y: 150, w: 120, h: 80 }), b = A.insertShape('rect', { x: 380, y: 150, w: 120, h: 80 }), c = A.insertShape('ellipse', { x: 300, y: 320, w: 90, h: 90 })
+      S.updateEl(a.id, e => { e.rot = 10 })
+      S.select([a.id, b.id]); A.groupSelected(); const inner = S.slide.value.elements.find(e => e.type === 'group'); S.updateEl(inner.id, x => { x.rot = 30 })
+      S.select([inner.id, c.id]); A.groupSelected(); const outer = S.slide.value.elements[0]; S.updateEl(outer.id, x => { x.rot = 20 })
+      S.select([outer.id]); A.addAnimation('fadeIn', 'entr'); S.select([])
+      return { a: a.id, b: b.id, c: c.id, inner: inner.id, outer: outer.id } })()`)
+    const ids = [r.a, r.b, r.c]
+    const at = async () => { const o = {}; for (const id of ids) o[id] = { p: await pt(id, 0.5, 0.5), t: await total(id) }; return o }
+    const turnOff = (x, y) => Math.abs(((x - y) % 360 + 540) % 360 - 180)
+    const same = (x, y) => ids.every(id => near(x[id].p, y[id].p, 0.05) && turnOff(x[id].t, y[id].t) < 0.05)
+    const s0 = await at()
+    await ev(`(() => { const A = __pz.actions, S = __pz.store; S.select([${JSON.stringify(r.outer)}]); A.ungroupSelected(); S.select([${JSON.stringify(r.inner)}]); A.ungroupSelected() })()`)
+    const anims = await ev(`__pz.store.slide.value.animations.length`)
+    check(same(s0, await at()) && (await els()).every(e => e.type !== 'group') && anims === 0, `ungrouping two turned groups, outer then inner, leaves every object where it showed, turned as it was, and drops the group's animation (${anims} left)`)
+    await ev(`__pz.store.undo(); __pz.store.undo()`); await wait(200)
+    check(same(s0, await at()) && (await els()).length === 1 && await ev(`__pz.store.slide.value.animations.length`) === 1, 'two undos bring both groups and the animation back')
+    const g = (await els())[0], gc = { x: g.x + g.w / 2, y: g.y + g.h / 2 }
+    await ev(`__pz.store.select([${JSON.stringify(r.outer)}]); __pz.actions.flipSelected('h')`)
+    const s1 = await at()
+    check(ids.every(id => near(s1[id].p, { x: 2 * gc.x - s0[id].p.x, y: s0[id].p.y }, 0.05) && turnOff(s1[id].t, 360 - s0[id].t) < 0.05), 'flipping the turned outer group mirrors every object across its centre line, each turned the other way')
+    const c0 = await pt(r.c, 0.5, 0.5)
+    await ev(`(() => { const A = __pz.actions, S = __pz.store; S.select([${JSON.stringify(r.a)}]); A.deleteSelected(); S.select([${JSON.stringify(r.b)}]); A.deleteSelected() })()`)
+    const left = await els(), o = left[0]
+    check(left.length === 1 && o.children.length === 1 && o.children[0].id === r.c && Math.abs(o.w - 90) < 0.01 && Math.abs(o.h - 90) < 0.01 && near(await pt(r.c, 0.5, 0.5), c0, 0.05), `deleting both boxes of the inner group drops the emptied group, and the outer group closes around the circle without moving it (${o.children.map(k => k.type).join()}, ${o.w.toFixed(2)}×${o.h.toFixed(2)})`)
+  })
 }

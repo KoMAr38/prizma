@@ -1,9 +1,9 @@
 // Task panes on the right: Format (shape/picture/text/background), Animation, Comments, Selection.
 import { useState, useRef } from 'preact/hooks'
 import {
-  doc, slide, selection, selected, pane, formatTab, select, updateEl, updateSlide, settings, appInfo, addMedia, theme as themeSig, editing
+  doc, slide, selection, selected, pane, formatTab, select, updateEl, updateSlide, settings, appInfo, addMedia, theme as themeSig, editing, oneStep
 } from '../core/store.js'
-import { solid, hexColor, DASHES, ARROWS, ELEMENT_LABEL, walk, findEl, onSlide, recrop } from '../core/model.js'
+import { solid, hexColor, DASHES, DASH_LABEL, ARROWS, ELEMENT_LABEL, walk, findEl, onSlide, recrop, uid } from '../core/model.js'
 import { slideBackground } from '../core/themes.js'
 import * as A from '../core/actions.js'
 import { Icon } from './Icon.jsx'
@@ -12,7 +12,7 @@ import { contextMenu } from './popover.jsx'
 import { animById, ANIM_KIND, DIR_LABEL } from '../show/effects.js'
 import { unitStep } from './ribbon/common.jsx'
 import { previewReq } from './ribbon/design.jsx'
-import { textRun, refitSoon } from '../app/commands.js'
+import { textRun, refitSoon, pickPicture } from '../app/commands.js'
 
 function PaneHead ({ title, children }) {
   return (
@@ -56,12 +56,8 @@ export function FillEditor ({ fill, onChange, picture = true, pattern = true, no
     else if (ty === 'pattern') onChange({ type: 'pattern', preset: 'smGrid', fg: 'dk1', bg: 'lt1' })
   }
   const pickImage = async () => {
-    const p = await window.prizmaNative.openDialog({ title: 'Insert picture', filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] }] })
-    if (!p?.[0]) return
-    const bytes = await window.prizmaNative.readFile(p[0])
-    const ext = p[0].split('.').pop().toLowerCase()
-    const src = addMedia(bytes, ext === 'png' ? 'image/png' : ext === 'svg' ? 'image/svg+xml' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg')
-    onChange({ type: 'image', src, mode: 'cover' })
+    const pic = await pickPicture('Insert picture')
+    if (pic) onChange({ type: 'image', src: addMedia(pic.bytes, pic.mime), mode: 'cover' })
   }
   const stops = fill?.stops || []
   const si = Math.min(stopI, stops.length - 1)
@@ -71,8 +67,8 @@ export function FillEditor ({ fill, onChange, picture = true, pattern = true, no
   const dragStop = (e, i) => {
     e.preventDefault(); e.stopPropagation()
     setStopI(i)
-    const bar = barRef.current
-    const move = ev => { const r = bar.getBoundingClientRect(); const pos = Math.round(Math.max(0, Math.min(100, (ev.clientX - r.left) / r.width * 100))); onChange({ ...fill, stops: fill.stops.map((s, j) => j === i ? { ...s, pos } : s) }) }
+    const bar = barRef.current, key = uid('stop') // one drag is one undo step
+    const move = ev => { const r = bar.getBoundingClientRect(); const pos = Math.round(Math.max(0, Math.min(100, (ev.clientX - r.left) / r.width * 100))); oneStep(() => onChange({ ...fill, stops: fill.stops.map((s, j) => j === i ? { ...s, pos } : s) }), key) }
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
@@ -131,7 +127,6 @@ export function FillEditor ({ fill, onChange, picture = true, pattern = true, no
 
 function LineEditor ({ line, onChange }) {
   const has = !!(line && line.color && line.width !== 0)
-  const dashLabel = { solid: 'Solid', dash: 'Dash', dot: 'Round dot', dashDot: 'Dash dot', longDash: 'Long dash', longDashDot: 'Long dash dot', sysDash: 'Square dot', sysDot: 'Dot' }
   return (
     <div class="fill-ed">
       <Radio name="line" label="No line" checked={!has} onChange={() => onChange(null)} />
@@ -141,7 +136,7 @@ function LineEditor ({ line, onChange }) {
           <Field label="Color"><Swatch value={line.color} onPick={c => onChange({ color: c })} /></Field>
           <Field label="Transparency"><Slider value={Math.round((1 - (line.alpha ?? 1)) * 100)} onChange={v => onChange({ alpha: v ? 1 - v / 100 : undefined })} /></Field>
           <Field label="Width"><NumField value={line.width ?? 1} step={0.25} min={0} max={200} fmt={v => v + ' pt'} onChange={v => onChange({ width: v })} /></Field>
-          <Field label="Dash type"><Select value={line.dash || 'solid'} options={Object.keys(DASHES).map(k => ({ value: k, label: dashLabel[k] || k }))} onChange={v => onChange({ dash: v })} /></Field>
+          <Field label="Dash type"><Select value={line.dash || 'solid'} options={Object.keys(DASHES).map(k => ({ value: k, label: DASH_LABEL[k] || k }))} onChange={v => onChange({ dash: v })} /></Field>
           <Field label="Cap"><Select value={line.cap || 'flat'} options={[{ value: 'butt', label: 'Flat' }, { value: 'round', label: 'Round' }, { value: 'square', label: 'Square' }]} onChange={v => onChange({ cap: v })} /></Field>
           <Field label="Join"><Select value={line.join || 'round'} options={[{ value: 'round', label: 'Round' }, { value: 'bevel', label: 'Bevel' }, { value: 'miter', label: 'Miter' }]} onChange={v => onChange({ join: v })} /></Field>
           <Field label="Begin arrow"><Select value={line.head || 'none'} options={ARROWS.map(a => ({ value: a, label: a[0].toUpperCase() + a.slice(1) }))} onChange={v => onChange({ head: v })} /></Field>
@@ -192,8 +187,8 @@ function SizeEditor ({ el }) {
   return (
     <>
       <Section title="Size">
-        <Field label="Height"><NumField value={el.h} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => set(lock ? { h: v, w: el.w * v / el.h } : { h: v })} /></Field>
-        <Field label="Width"><NumField value={el.w} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => set(lock ? { w: v, h: el.h * v / el.w } : { w: v })} /></Field>
+        <Field label="Height"><NumField value={el.h} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => A.setSize([el.id], 'h', v)} /></Field>
+        <Field label="Width"><NumField value={el.w} step={unitStep()} fmt={fmt} parse={unitParse} min={1} width={110} onChange={v => A.setSize([el.id], 'w', v)} /></Field>
         <Field label="Rotation"><NumField value={el.rot || 0} step={1} min={-360} max={720} width={110} fmt={v => Math.round(v * 10) / 10 + '°'} onChange={v => set({ rot: ((v % 360) + 360) % 360 })} /></Field>
         <Check label="Lock aspect ratio" checked={lock} disabled={el.type === 'image'} onChange={v => A.setProps({ lockAspect: v || undefined }, [el.id])} />
       </Section>
@@ -204,7 +199,7 @@ function SizeEditor ({ el }) {
       </Section>
       {isText && <TextBoxEditor el={el} ins={ins} />}
       <Section title="Alt text" open={false}>
-        <TextInput multiline rows={3} value={el.alt || ''} placeholder="Describe this object for screen readers" onChange={v => A.setProps({ alt: v || undefined }, [el.id])} />
+        <TextInput multiline rows={3} value={el.alt || ''} placeholder="Describe this object for screen readers" onChange={v => A.setProps({ alt: v || undefined }, [el.id], { coalesce: 'alt:' + el.id })} />
       </Section>
     </>
   )
@@ -268,7 +263,7 @@ function TextFillEditor ({ el }) {
   return (
     <>
       <Section title="Text fill">
-        <Field label="Color"><Swatch value={el.ts?.color || 'dk1'} onPick={c => { textRun('color', c); A.setTs({ color: c }) }} /></Field>
+        <Field label="Color"><Swatch value={el.ts?.color || 'dk1'} onPick={c => oneStep(() => { textRun('color', c); A.setTs({ color: c }) })} /></Field>
         <Check label="Gradient fill" checked={!!fx.gradient} onChange={v => setFx({ gradient: v ? ['accent1', 'accent2'] : undefined })} />
         {fx.gradient && <>
           <Field label="From"><Swatch value={fx.gradient[0]} onPick={c => setFx({ gradient: [c, fx.gradient[1]] })} /></Field>
@@ -408,7 +403,7 @@ export function CommentsPane () {
         <div class="cm-new">
           <span class="avatar">{me.slice(0, 1).toUpperCase()}</span>
           <div class="cm-box">
-            <textarea value={text} placeholder="Add a comment…" rows={3} onInput={e => setText(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) post() }} />
+            <textarea value={text} placeholder="Add a comment…" rows={3} spellcheck={settings.value.spellcheck !== false} onInput={e => setText(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) post() }} />
             <div class="cm-actions"><span class="fe-note">Ctrl+Enter to post</span><button class="btn btn-primary btn-sm" disabled={!text.trim()} onClick={post}>Post</button></div>
           </div>
         </div>
@@ -457,7 +452,7 @@ export function SelectionPane () {
         {!rows.length && <div class="pane-empty"><Icon name="layers" size={22} />This slide has no objects.</div>}
         {rows.map(({ e, depth }) => (
           <div key={e.id} class={'sp-row' + (sel.includes(e.id) ? ' cur' : '') + (e.hidden ? ' hid' : '')} style={{ paddingLeft: 10 + depth * 16 + 'px' }}
-            onClick={ev => { const id = e.id; select(ev.ctrlKey || ev.shiftKey ? (sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]) : [id]) }}
+            onClick={ev => { const id = e.id; select(ev.ctrlKey || ev.shiftKey ? (sel.includes(id) ? sel.filter(x => x !== id) : A.addToSelection(sel, id)) : [id]) }}
             onDblClick={() => setRenaming(e.id)}>
             <Icon name={{ text: 'type', shape: 'shapes', line: 'minus', image: 'image', table: 'table', chart: 'chart-column', group: 'group', icon: 'smile', ink: 'pen-tool', video: 'film', audio: 'volume-2' }[e.type] || 'square'} size={14} />
             {renaming === e.id

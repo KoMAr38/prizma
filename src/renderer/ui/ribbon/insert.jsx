@@ -1,7 +1,7 @@
 // Insert and Draw tabs.
 import { signal } from '@preact/signals'
 import { useState } from 'preact/hooks'
-import { doc, tool, selection, openDialog, theme as themeSig, editing, slide, select } from '../../core/store.js'
+import { doc, tool, selection, openDialog, theme as themeSig, editing, slide, select, oneStep } from '../../core/store.js'
 import { hexColor, textBox } from '../../core/model.js'
 import { Group, Col, Row } from '../controls.jsx'
 import { Btn, Drop, Split, Icon, runCmd, A, NewSlideBtn, ShapesDrop, closePop } from './common.jsx'
@@ -47,9 +47,7 @@ export function wordArtCss (fx, theme) {
 }
 export function applyWordArt (w) {
   if (selection.value.length && !editing.value) {
-    A.setProps({ textFx: w.fx })
-    A.textRunAll('color', null)
-    A.setTs({ color: w.color, bold: true })
+    oneStep(() => { A.setProps({ textFx: w.fx }); A.textRunAll('color', null); A.setTs({ color: w.color, bold: true }) })
     return
   }
   const z = doc.value.size

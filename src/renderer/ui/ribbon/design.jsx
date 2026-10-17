@@ -1,7 +1,7 @@
 // Design, Transitions, Animations and Slide Show tabs.
 import { useState, useEffect } from 'preact/hooks'
 import { signal } from '@preact/signals'
-import { doc, slide, selection, settings, native, update, updateSlide, openDialog, theme as themeSig, pane } from '../../core/store.js'
+import { doc, slide, selection, settings, native, update, updateSlide, openDialog, theme as themeSig, pane, setSetting } from '../../core/store.js'
 import { THEMES, makeDocTheme, newSlide, themeById } from '../../core/themes.js'
 import { SLIDE_SIZES } from '../../core/model.js'
 import { Group, Col, Row, Gallery, NumField, Check, Select, PickGrid } from '../controls.jsx'
@@ -209,7 +209,7 @@ export function SlideShowTab () {
       <Group label="Monitors">
         <Col>
           <Row><Icon name="monitor" size={15} /><Select width={170} value={String(d.show?.display || 'auto')} onChange={v => setShow({ display: v })} options={[{ value: 'auto', label: 'Automatic' }, ...displays.map((x, i) => ({ value: String(x.id), label: `${x.primary ? 'Primary' : 'Monitor ' + (i + 1)} (${x.width}×${x.height})` }))]} /></Row>
-          <Check label="Use presenter view" checked={settings.value.presenterView !== false} onChange={v => { settings.value = { ...settings.value, presenterView: v }; native?.setSettings({ presenterView: v }) }} />
+          <Check label="Use presenter view" checked={settings.value.presenterView !== false} onChange={v => setSetting({ presenterView: v })} />
         </Col>
       </Group>
     </>

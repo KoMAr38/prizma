@@ -7,16 +7,16 @@ import {
   focusArea, editorReq, ribbonTab, select, update, updateEl, updateEls, toast, selected, finishEditing, openDialog, settings, showRuler
 } from '../core/store.js'
 import { Rulers } from './Rulers.jsx'
-import { PX, findEl, parentFrame, parentGroups, refitGroup, onSlide, bounds, unionBounds, rotatePt, lineEnds, boxFromPoints, round2, screenCrop } from '../core/model.js'
+import { PX, findEl, walk, cloneEl, parentFrame, parentGroups, refitGroup, onSlide, bounds, unionBounds, rotatePt, lineEnds, boxFromPoints, round2, screenCrop } from '../core/model.js'
 import { SlideView } from '../render/SlideView.jsx'
 import { TextEditor, CellEditor } from './TextEditor.jsx'
 import * as A from '../core/actions.js'
 import { contextMenu } from '../ui/popover.jsx'
 import { Icon } from '../ui/Icon.jsx'
-import { mimeOf, runCmd } from '../app/commands.js'
+import { mimeOf, runCmd, cmdEnabled, pickPicture } from '../app/commands.js'
 import { openPath, extOf, OPEN_EXT } from '../app/files.js'
 import { LAYOUTS } from '../core/themes.js'
-import { mediaUrl } from '../core/store.js'
+import { mediaUrl, addMedia } from '../core/store.js'
 import { caretAt } from './TextEditor.jsx'
 
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
@@ -101,12 +101,17 @@ export function Stage () {
     const smart = settings.value.smartGuides !== false
     const xs = smart ? [0, W / 2, W] : [], ys = smart ? [0, H / 2, H] : []
     if (showGuides.value) { xs.push(guidePos.x ?? W / 2); ys.push(guidePos.y ?? H / 2) }
-    if (smart) for (const e of s.elements) {
-      if (exclude.has(e.id) || e.hidden) continue
-      const b = bounds(e)
-      xs.push(b.x, b.x + b.w / 2, b.x + b.w)
-      ys.push(b.y, b.y + b.h / 2, b.y + b.h)
-    }
+    // a group around a dragged object would snap it back to its own old place: the group's other objects count instead
+    const holds = new Set([...exclude].flatMap(id => parentGroups(s, id).map(g => g.id)))
+    if (smart) walk(s.elements, (e, parent) => {
+      if (holds.has(e.id)) return
+      if (!exclude.has(e.id) && !e.hidden) {
+        const b = bounds(parent ? onSlide(s, e) : e)
+        xs.push(b.x, b.x + b.w / 2, b.x + b.w)
+        ys.push(b.y, b.y + b.h / 2, b.y + b.h)
+      }
+      return false
+    })
     return { xs, ys }
   }
   const snapBox = (b, lines, alt) => {
@@ -136,13 +141,13 @@ export function Stage () {
     if (target.closest('video[controls], audio[controls]')) return // media preview controls
     const p = toPt(e)
     const t = tool.value
+    stageRef.current.focus({ preventScroll: true }) // before a right click selects: a field typed in commits on blur, to its own object
     if (e.button === 2) {
       // right click selects what is under the pointer, the menu opens on contextmenu
       const chain = idChain(target, frameRef.current)
       if (chain.length && !chain.some(id => sel.includes(id))) { finishEditing(); select([chain[0]]) }
       return
     }
-    stageRef.current.focus({ preventScroll: true })
     // drawing tools
     if (t) {
       e.preventDefault()
@@ -176,15 +181,15 @@ export function Stage () {
     if (painter.value) { A.applyFormat(id); return }
     const wasSelected = sel.includes(id)
     const el = findEl(s, id)?.el
+    const ids = wasSelected ? sel : e.shiftKey || e.ctrlKey ? A.addToSelection(sel, id) : [id]
     if (e.shiftKey || e.ctrlKey) {
       if (wasSelected && !e.ctrlKey) { select(sel.filter(x => x !== id)); return }
-      if (!wasSelected) select([...sel, id])
+      if (!wasSelected) select(ids)
     } else if (!wasSelected) {
       finishEditing()
       select([id])
     }
     if (editing.value && editing.value !== id) finishEditing()
-    const ids = (e.shiftKey || e.ctrlKey) ? (wasSelected ? sel : [...sel, id]) : (wasSelected ? sel : [id])
     const orig = {}
     for (const x of ids) { const h = findEl(s, x); if (h) orig[x] = { x: h.el.x, y: h.el.y, rot: parentFrame(s, x).rot } }
     const box = unionBounds(ids.map(x => { const h = findEl(s, x); return h ? onSlide(s, h.el) : null }).filter(Boolean))
@@ -216,7 +221,7 @@ export function Stage () {
     if (!els.length) return
     finishEditing()
     if (h === 'rot') {
-      const ub = els.length === 1 ? els[0].abs : unionBounds(els.map(x => x.abs))
+      const ub = els[0].abs // the rotate handle shows for one object only
       const c = { x: ub.x + ub.w / 2, y: ub.y + ub.h / 2 }
       drag.current = { mode: 'rotate', els, c, a0: Math.atan2(p.y - c.y, p.x - c.x) }
       capture(e); return
@@ -288,13 +293,7 @@ export function Stage () {
       for (const x of g.els) {
         let r = (x.el.rot || 0) + da
         if (e.shiftKey) r = Math.round(r / 15) * 15
-        const dr = r - (x.el.rot || 0)
-        let pos = { x: x.el.x, y: x.el.y }
-        if (g.els.length > 1) {
-          const nc = x.f.fromSlide(rotatePt({ x: x.abs.x + x.abs.w / 2, y: x.abs.y + x.abs.h / 2 }, g.c, dr))
-          pos = { x: nc.x - x.el.w / 2, y: nc.y - x.el.h / 2 }
-        }
-        map[x.id] = { ...pos, rot: ((r % 360) + 360) % 360 }
+        map[x.id] = { rot: ((r % 360) + 360) % 360 }
       }
       g.map = map
       live.value = map
@@ -304,12 +303,8 @@ export function Stage () {
       const ends = [...g.ends]
       let q = p
       const other = ends[1 - g.end]
-      if (e.shiftKey) {
-        const ang = Math.atan2(q.y - other.y, q.x - other.x)
-        const sa = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4)
-        const len = Math.hypot(q.x - other.x, q.y - other.y)
-        q = { x: other.x + Math.cos(sa) * len, y: other.y + Math.sin(sa) * len }
-      } else if (!e.altKey) {
+      if (e.shiftKey) q = snap45(other, q)
+      else if (!e.altKey) {
         // snap the end to other objects' connection points (edges' midpoints and corners)
         const th = 8 / k
         for (const o of s.elements) {
@@ -460,9 +455,8 @@ export function Stage () {
             for (const id of g.ids) {
               const h = findEl(sl, id)
               if (!h) continue
-              const c = JSON.parse(JSON.stringify(h.el))
-              const fresh = x => { x.id = Math.random().toString(36).slice(2, 10); (x.children || []).forEach(fresh) }
-              fresh(c); c.x = map[id].x; c.y = map[id].y
+              const c = cloneEl(h.el)
+              c.x = map[id].x; c.y = map[id].y
               h.list.splice(h.index + 1, 0, c)
               copies.push(c.id)
             }
@@ -475,7 +469,7 @@ export function Stage () {
       // click without dragging
       const el = g.el
       if (!el || e.shiftKey || e.ctrlKey) return
-      if (el.type === 'text' && !el.locked && !(el.ph === 'pic' && !el.html?.replace(/<[^>]+>/g, '').trim())) { startEdit(el.id, g.client) ; return }
+      if (el.type === 'text' && !(el.ph === 'pic' && !el.html?.replace(/<[^>]+>/g, '').trim())) { startEdit(el.id, g.client) ; return }
       if (el.ph === 'pic') { runCmd('ins.picture'); return }
       if (el.type === 'shape' && g.wasSelected) { startEdit(el.id, g.client); return }
       if (el.type === 'table') {
@@ -535,10 +529,8 @@ export function Stage () {
       if (e.shiftKey) { const m = Math.max(box.w, box.h); box = { x: b.x < a.x ? a.x - m : a.x, y: b.y < a.y ? a.y - m : a.y, w: m, h: m } }
     }
     if (g.kind === 'text') {
-      if (!box) {
-        const el = A.insertTextBox({ x: a.x - 4, y: a.y - 14, w: 40, h: 30 })
-        A.setProps({ wrap: false }, [el.id])
-      } else A.insertTextBox({ ...box, h: Math.max(30, box.h) })
+      if (!box) A.insertTextBox({ x: a.x - 4, y: a.y - 14, w: 40, h: 30 }) // this narrow, it grows with its text instead of wrapping
+      else A.insertTextBox({ ...box, h: Math.max(30, box.h) })
       editorReq.value = { mode: 'end' }
       return
     }
@@ -596,8 +588,8 @@ export function Stage () {
     }
     items.push(
       { label: 'Group', icon: 'group', sub: [
-        { label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: selection.value.length < 2, run: () => runCmd('obj.group') },
-        { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !selected.value.some(x => x.type === 'group'), run: () => runCmd('obj.ungroup') }] },
+        { label: 'Group', icon: 'group', kbd: 'Ctrl+G', disabled: !cmdEnabled('obj.group'), run: () => runCmd('obj.group') },
+        { label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', disabled: !cmdEnabled('obj.ungroup'), run: () => runCmd('obj.ungroup') }] },
       { label: 'Bring to front', icon: 'bring-to-front', sub: [{ label: 'Bring to front', icon: 'bring-to-front', run: () => runCmd('obj.front') }, { label: 'Bring forward', icon: 'arrow-up-from-line', run: () => runCmd('obj.forward') }] },
       { label: 'Send to back', icon: 'send-to-back', sub: [{ label: 'Send to back', icon: 'send-to-back', run: () => runCmd('obj.back') }, { label: 'Send backward', icon: 'arrow-down-to-line', run: () => runCmd('obj.backward') }] },
       { sep: true },
@@ -712,11 +704,8 @@ function smoothPath (pts) {
   return d + ` L${l.x.toFixed(2)} ${l.y.toFixed(2)}`
 }
 export async function changePicture (id) {
-  const paths = await window.prizmaNative.openDialog({ title: 'Change picture', filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp'] }] })
-  if (!paths?.[0]) return
-  const pic = await A.loadPicture(await window.prizmaNative.readFile(paths[0]), mimeOf(paths[0]))
-  if (!pic) return A.cantShowPicture(paths[0].split(/[\\/]/).pop())
-  const { addMedia } = await import('../core/store.js')
+  const pic = await pickPicture('Change picture')
+  if (!pic) return
   const src = addMedia(pic.bytes, pic.mime)
   updateEl(id, e => { e.src = src; e.crop = null; e.natW = pic.w; e.natH = pic.h; const ar = pic.w / pic.h; const nh = e.w / ar; e.y += (e.h - nh) / 2; e.h = nh })
 }
@@ -747,7 +736,7 @@ function Overlay ({ s, k, W, H, sel, selEls, marq, ink, preview }) {
     }
     const isCrop = crop === el.id
     const editingThis = editingId === el.id
-    const showHandles = !isCrop && !el.locked
+    const showHandles = !isCrop
     // group outline when a child is selected
     const top = s.elements.find(t => t.type === 'group' && t.id !== el.id && findEl({ elements: [t] }, el.id))
     if (top) parts.push(<div key={el.id + 'g'} class="sel-group" style={{ left: top.x * k + 'px', top: top.y * k + 'px', width: top.w * k + 'px', height: top.h * k + 'px', transform: top.rot ? `rotate(${top.rot}deg)` : undefined }} />)

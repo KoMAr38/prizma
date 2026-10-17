@@ -161,27 +161,37 @@ export function dataUrlToBytes (dataUrl) {
   }
   return { bytes: new TextEncoder().encode(decodeURIComponent(m[3])), mime }
 }
-export function bytesToBase64 (bytes) {
-  let s = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
-  return btoa(s)
-}
+// FileReader encodes off the main thread: btoa on a big picture held the window still for seconds
+export const bytesToBase64 = bytes => new Promise((resolve, reject) => {
+  const r = new FileReader()
+  r.onload = () => resolve(r.result.slice(r.result.indexOf(',') + 1))
+  r.onerror = () => reject(r.error)
+  r.readAsDataURL(new Blob([bytes]))
+})
 
 // ---------- mutations ----------
+// The updates made inside fn are one undo step; with a key, the next oneStep with that key soon after joins it too
+let step = null
+export function oneStep (fn, key) {
+  const outer = step
+  step = step || { key, done: false }
+  try { return fn() } finally { step = outer }
+}
 export function update (recipe, opts = {}) {
   const prev = doc.value
   if (!prev) return
   const next = produce(prev, recipe)
   if (next === prev) return
   const now = Date.now()
+  const key = opts.coalesce || step?.key, merge = opts.merge || !!step?.done
   // quick repeats merge into one undo step, but only on the same slide (duplicated slides share element ids)
-  const coalesce = opts.merge || (opts.coalesce && opts.coalesce === lastKey && now - lastTime < (opts.window || 1200) && slideIdx.value === lastSlide)
+  const coalesce = merge || (key && key === lastKey && now - lastTime < (opts.window || 1200) && slideIdx.value === lastSlide)
   if (!coalesce || !undoStack.length) {
     undoStack.push({ doc: prev, slideIdx: slideIdx.value, selection: selection.value })
     if (undoStack.length > MAX_UNDO) undoStack.shift()
   }
-  if (!opts.merge) { lastKey = opts.coalesce || null; lastTime = now; lastSlide = slideIdx.value }
+  if (!merge) { lastKey = key || null; lastTime = now; lastSlide = slideIdx.value }
+  if (step) step.done = true
   redoStack.length = 0
   batch(() => {
     doc.value = next
@@ -261,8 +271,13 @@ export function updateEls (ids, fn, opts) {
   update(d => {
     const s = d.slides[i]
     for (const id of ids) { const hit = findEl(s, id); if (hit) fn(hit.el, s, d) }
-    for (const id of ids) for (const g of parentGroups(s, id)) refitGroup(g) // a moved child changes its group's box
+    // a changed child changes its group's box, the group's own too when the change was made to the group
+    for (const id of ids) for (const g of [findEl(s, id)?.el, ...parentGroups(s, id)]) if (g?.type === 'group') refitGroup(g)
   }, opts)
+}
+export function setSetting (patch) {
+  settings.value = { ...settings.value, ...patch }
+  native?.setSettings(patch)
 }
 export function updateSlide (fn, opts, idx = slideIdx.value) {
   update(d => { if (d.slides[idx]) fn(d.slides[idx], d) }, opts)
