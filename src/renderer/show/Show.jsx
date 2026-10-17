@@ -2,7 +2,7 @@
 // The same component runs the audience window, the presenter view's main slide, reading view and previews.
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'preact/hooks'
 import { SlideView } from '../render/SlideView.jsx'
-import { PX, walk, findEl, cssColor } from '../core/model.js'
+import { PX, walk, findEl } from '../core/model.js'
 import { numberingCss } from '../core/html.js'
 import { animFrames, transitionFrames } from './effects.js'
 import { Icon } from '../ui/Icon.jsx'
@@ -39,7 +39,7 @@ function initiallyHidden (slide) {
 const isClickAdvance = s => s.advanceClick !== false
 
 // Plays (or fast-forwards) one click group inside a rendered slide layer
-function playGroup (layer, slide, group, k, instant, noAnim) {
+function playGroup (layer, slide, group, instant, noAnim) {
   const anims = []
   const W = layer.offsetWidth, H = layer.offsetHeight
   for (const it of group.items) {
@@ -95,8 +95,6 @@ export function Show ({ doc: d, start = 0, master = true, channel, onEnd, mode =
   const k = Math.min(vp.w / (W * PX), vp.h / (H * PX))
   const sw = W * PX * k, sh = H * PX * k
   const slide = d.slides[shown(pos)]
-  const groups = slide ? buildGroups(slide) : []
-  const totalSteps = groups.filter(g => !g.auto).length + (groups[0]?.auto ? 0 : 0)
 
   useEffect(() => {
     if (fit) { setVp(fit); return }
@@ -163,8 +161,8 @@ export function Show ({ doc: d, start = 0, master = true, channel, onEnd, mode =
     const clicks = gs.filter((g, gi) => !(gi === 0 && g.auto))
     const noAnim = !!d.show?.noAnim
     const doneSteps = pos.from === 'back' || pos.from === 'rebuild' ? pos.step : 0
-    if (autoFirst) running.current.push(...playGroup(layer, slide, gs[0], k, doneSteps > 0 || pos.from === 'back', noAnim))
-    for (let gi = 0; gi < doneSteps && gi < clicks.length; gi++) running.current.push(...playGroup(layer, slide, clicks[gi], k, true, noAnim))
+    if (autoFirst) running.current.push(...playGroup(layer, slide, gs[0], doneSteps > 0 || pos.from === 'back', noAnim))
+    for (let gi = 0; gi < doneSteps && gi < clicks.length; gi++) running.current.push(...playGroup(layer, slide, clicks[gi], true, noAnim))
     // media autoplay, only in the window that runs the show (the presenter's copy would play the sound twice)
     if (master) for (const m of layer.querySelectorAll('.pz-media-node[data-autoplay="1"]')) { m.currentTime = 0; m.play().catch(() => {}) }
     else for (const m of layer.querySelectorAll('.pz-media-node')) m.muted = true
@@ -192,7 +190,7 @@ export function Show ({ doc: d, start = 0, master = true, channel, onEnd, mode =
     const gs = buildGroups(slide)
     const clicks = gs.filter((g, gi) => !(gi === 0 && g.auto))
     const g = clicks[pos.step - 1]
-    if (g) running.current.push(...playGroup(layer, slide, g, k, false, !!d.show?.noAnim))
+    if (g) running.current.push(...playGroup(layer, slide, g, false, !!d.show?.noAnim))
     broadcast(pos)
     // with timings every click step also waits the slide's time, so no step is left waiting for a click
     if (master && live && d.show?.useTimings !== false && slide.advanceAfter != null && !rehearse) {
@@ -215,7 +213,7 @@ export function Show ({ doc: d, start = 0, master = true, channel, onEnd, mode =
     const t = prevSlide.t, ps = prevSlide.slide
     // the outgoing slide leaves fully built: entered objects in, exited ones gone (shortcut: a jump away mid-build shows it fully built too, keep the left step in pos if that matters)
     for (const id of initiallyHidden(ps)) { const n = prev.querySelector(`.pz-el[data-id="${id}"]`); if (n) n.style.visibility = 'hidden' }
-    for (const g of buildGroups(ps)) playGroup(prev, ps, g, k, true)
+    for (const g of buildGroups(ps)) playGroup(prev, ps, g, true)
     const dur = Math.max(0.05, t.dur ?? 0.7) * 1000
     const anims = []
     if (t.type === 'morph') anims.push(...morph(prev, cur, ps, slide, dur))
@@ -527,4 +525,3 @@ function morph (prevLayer, curLayer, ps, cs, dur) {
   if (!sameBg) anims.push(prevLayer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: dur, easing: 'ease', fill: 'both' }))
   return anims
 }
-export { cssColor }

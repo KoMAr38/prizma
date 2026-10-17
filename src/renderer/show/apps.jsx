@@ -132,7 +132,7 @@ export function PresenterApp () {
       <main class="pv-main">
         <section class="pv-cur">
           <div class="pv-curbox" ref={boxRef}>
-            <Show doc={d} start={ctx.start} master={solo} channel={solo ? showChannel : showChannel} mode={solo ? 'show-solo' : 'presenter-mirror'} fit={box} settings={ctx.settings} toolbar={false} onEnd={solo ? endAll : undefined} />
+            <Show doc={d} start={ctx.start} master={solo} channel={showChannel} mode={solo ? 'show-solo' : 'presenter-mirror'} fit={box} settings={ctx.settings} toolbar={false} onEnd={solo ? endAll : undefined} />
           </div>
           <div class="pv-tools">
             <button onClick={() => cmd('prev')} data-tip="Previous"><Icon name="chevron-left" size={22} /></button>
