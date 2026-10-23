@@ -38,7 +38,7 @@ function writeJson (name, value) {
 }
 const DEFAULT_SETTINGS = {
   theme: 'dark', author: '', autosaveMinutes: 2, defaultFormat: 'pptx',
-  showStart: true, presenterView: true, window: null
+  showStart: true, presenterView: true, window: null, language: 'auto'
 }
 let settings = { ...DEFAULT_SETTINGS, ...readJson('settings.json', {}) }
 let recent = readJson('recent.json', [])
@@ -50,6 +50,26 @@ function addRecent (p) {
   try { app.addRecentDocument(p) } catch {}
   return recent
 }
+
+// ---------- interface language ----------
+// English strings are the keys of dist/locales/<lang>.json; a missing key stays English
+const LANGS = ['sv', 'da', 'de', 'el', 'it', 'fr', 'ja', 'zh', 'pt-BR', 'es', 'pt-PT', 'ru', 'uk', 'mk', 'hu', 'bg', 'ro', 'tr', 'fi', 'nb', 'sr']
+function supported (tag) {
+  const t = String(tag || '').toLowerCase().replace('_', '-'), base = t.split('-')[0]
+  if (['nb', 'no', 'nn'].includes(base)) return 'nb'
+  if (['sr', 'hr', 'bs', 'sh'].includes(base)) return 'sr' // Serbian in Latin script reads for Croatian and Bosnian too
+  if (base === 'pt') return t === 'pt-br' ? 'pt-BR' : 'pt-PT'
+  if (base === 'zh') return 'zh' // Simplified Chinese, also for Traditional until it has its own table
+  return base === 'en' || LANGS.includes(base) ? base : null
+}
+// called after app is ready: Windows' display languages are known only then
+const uiLang = () => (settings.language && settings.language !== 'auto' && supported(settings.language)) ||
+  [...app.getPreferredSystemLanguages(), app.getLocale()].map(supported).find(Boolean) || 'en'
+const dicts = {}
+const dictOf = l => dicts[l] || (dicts[l] = l === 'en' ? {} : readJsonAt(path.join(DIST, 'locales', l + '.json')))
+function readJsonAt (p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')) } catch (e) { console.error('locale', p, e.message); return {} } }
+const mt = s => dictOf(uiLang())[s] || s
+ipcMain.on('i18n:get', e => { const lang = uiLang(); e.returnValue = { lang, dict: dictOf(lang) } })
 
 // ---------- theme colours for the native title bar overlay ----------
 const CHROME = { dark: { bar: '#0A0F1E', fg: '#E8ECF8', bg: '#090E1C' }, light: { bar: '#E9EEF7', fg: '#0E1630', bg: '#E9EEF7' } }
@@ -174,8 +194,8 @@ function wireContextMenu (wc) {
     const items = []
     for (const s of (p.dictionarySuggestions || []).slice(0, 6)) items.push({ label: s, click: () => wc.replaceMisspelling(s) })
     if (p.misspelledWord) {
-      if (!items.length) items.push({ label: 'No suggestions', enabled: false })
-      items.push({ label: 'Add to dictionary', click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' })
+      if (!items.length) items.push({ label: mt('No suggestions'), enabled: false })
+      items.push({ label: mt('Add to dictionary'), click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' })
     }
     if (p.isEditable) items.push({ role: 'cut', enabled: p.editFlags.canCut }, { role: 'copy', enabled: p.editFlags.canCopy }, { role: 'paste', enabled: p.editFlags.canPaste }, { type: 'separator' }, { role: 'selectAll' })
     else items.push({ role: 'copy' })
@@ -372,15 +392,15 @@ ipcMain.handle('app:init', e => {
 })
 ipcMain.handle('dialog:open', async (e, o = {}) => {
   const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
-    title: o.title || 'Open', defaultPath: o.defaultPath || app.getPath('documents'),
-    filters: o.filters || FILTERS.open, properties: ['openFile', ...(o.multi ? ['multiSelections'] : [])]
+    title: mt(o.title || 'Open'), defaultPath: o.defaultPath || app.getPath('documents'),
+    filters: (o.filters || FILTERS.open).map(f => ({ ...f, name: mt(f.name) })), properties: ['openFile', ...(o.multi ? ['multiSelections'] : [])]
   })
   return r.canceled ? [] : r.filePaths
 })
 ipcMain.handle('dialog:save', async (e, o = {}) => {
   const r = await dialog.showSaveDialog(BrowserWindow.fromWebContents(e.sender), {
-    title: o.title || 'Save as', defaultPath: o.defaultPath ? (path.isAbsolute(o.defaultPath) ? o.defaultPath : path.join(app.getPath('documents'), o.defaultPath)) : app.getPath('documents'),
-    filters: o.filters || [{ name: 'PowerPoint Presentation (*.pptx)', extensions: ['pptx'] }]
+    title: mt(o.title || 'Save as'), defaultPath: o.defaultPath ? (path.isAbsolute(o.defaultPath) ? o.defaultPath : path.join(app.getPath('documents'), o.defaultPath)) : app.getPath('documents'),
+    filters: (o.filters || [{ name: 'PowerPoint Presentation (*.pptx)', extensions: ['pptx'] }]).map(f => ({ ...f, name: mt(f.name) }))
   })
   return r.canceled ? null : r.filePath
 })
@@ -497,7 +517,7 @@ ipcMain.handle('win:new', (e, p) => { if (p && !p.startsWith(':')) openPath(p); 
 ipcMain.handle('win:focus-file', (e, p) => focusFile(p))
 ipcMain.handle('displays', () => {
   const primary = screen.getPrimaryDisplay().id
-  return screen.getAllDisplays().map((d, i) => ({ id: d.id, primary: d.id === primary, label: d.label || `Display ${i + 1}`, width: d.size.width, height: d.size.height, scale: d.scaleFactor }))
+  return screen.getAllDisplays().map((d, i) => ({ id: d.id, primary: d.id === primary, label: d.label || mt('Display {0}').replace('{0}', i + 1), width: d.size.width, height: d.size.height, scale: d.scaleFactor }))
 })
 // without a graphics card Chromium composites on the CPU, and the blur behind the glass panels then costs about 0.1 s a frame
 const softGpu = () => !/^enabled/.test(app.getGPUFeatureStatus().gpu_compositing || '')
@@ -560,7 +580,7 @@ app.whenReady().then(() => {
   if (!isWin) try { session.defaultSession.setSpellCheckerLanguages(['en-US']) } catch {}
   if (isWin) {
     try {
-      app.setUserTasks([{ program: process.execPath, arguments: '--new', iconPath: process.execPath, iconIndex: 0, title: 'New presentation', description: 'Open a new Prizma window' }])
+      app.setUserTasks([{ program: process.execPath, arguments: '--new', iconPath: process.execPath, iconIndex: 0, title: mt('New presentation'), description: mt('Open a new Prizma window') }])
     } catch {}
   }
   const files = filesFromArgv(process.argv)

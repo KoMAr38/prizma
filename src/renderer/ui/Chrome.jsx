@@ -5,6 +5,7 @@ import {
   doc, file, dirty, slideIdx, slide, canUndo, canRedo, zoom, fitZoom, view, pane, showNotes, searchOpen, appInfo, busy, focusArea, native, settings
 } from '../core/store.js'
 import { Icon } from './Icon.jsx'
+import { t as tr } from '../i18n.js'
 import { Btn, Slider } from './controls.jsx'
 import { closePop, togglePop } from './popover.jsx'
 import { CMDS, runCmd, cmdEnabled, zoomBy, uiShown } from '../app/commands.js'
@@ -63,7 +64,7 @@ function Search () {
     const t = q.trim().toLowerCase()
     if (!t) return []
     const words = t.split(/\s+/)
-    return searchable.value.filter(c => { const l = (c.label + ' ' + (c.tags || '')).toLowerCase(); return words.every(w => l.includes(w)) }).slice(0, 9)
+    return searchable.value.filter(c => { const l = (c.label + ' ' + tr(c.label) + ' ' + (c.tags || '')).toLowerCase(); return words.every(w => l.includes(w)) }).slice(0, 9)
   }
   const list = results()
   const run = c => { setQ(''); inp.current?.blur(); searchOpen.value = false; runCmd(c.id) }

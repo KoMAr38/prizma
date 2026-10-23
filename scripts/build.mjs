@@ -17,6 +17,8 @@ const pdfjs = path.join(root, 'node_modules/pdfjs-dist')
 fs.copyFileSync(path.join(pdfjs, 'build/pdf.worker.min.mjs'), path.join(dist, 'pdf.worker.mjs'))
 fs.cpSync(path.join(pdfjs, 'cmaps'), path.join(dist, 'pdfjs/cmaps'), { recursive: true })
 fs.cpSync(path.join(pdfjs, 'standard_fonts'), path.join(dist, 'pdfjs/standard_fonts'), { recursive: true })
+// interface languages: the main process reads the one it needs (src/main/main.js, uiLang)
+fs.cpSync(path.join(root, 'src/locales'), path.join(dist, 'locales'), { recursive: true })
 
 // pptxtojson throws on one odd object and the whole .pptx fails to open; its own source is bundled with each object read
 // inside a try/catch, as importPptx's convert() does for Prizma's step (a missing anchor fails the build, never silently)

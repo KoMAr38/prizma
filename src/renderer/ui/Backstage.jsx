@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import {
-  backstage, doc, file, appInfo, settings, recovery, native, update, slideIdx, setSetting
+  backstage, doc, file, appInfo, settings, recovery, native, update, slideIdx, setSetting, toast
 } from '../core/store.js'
 import { THEMES } from '../core/themes.js'
 import { SLIDE_SIZES } from '../core/model.js'
@@ -93,7 +93,7 @@ function RecentList ({ filter = '' }) {
           { label: 'Remove from list', icon: 'x', run: () => remove(r.path) }
         ])}>
           <span class="ic-badge bs-file-ic" style={{ '--c': extColor(r.path) }}><Icon name={extIcon(r.path)} size={17} /></span>
-          <span class="bs-file-n">{r.name}<small>{dirOf(r.path)}</small></span>
+          <span class="bs-file-n" translate="no">{r.name}<small>{dirOf(r.path)}</small></span>
           <span class="bs-file-t">{when(r.time)}</span>
         </button>
       ))}
@@ -177,7 +177,7 @@ function InfoPage () {
       <h1>Info</h1>
       <div class="bs-info">
         <div>
-          <div class="bs-doc"><Icon name="presentation" size={30} /><div><b>{f.name}</b><small>{f.path || 'Not saved yet'}</small></div></div>
+          <div class="bs-doc"><Icon name="presentation" size={30} /><div><b translate="no">{f.name}</b><small>{f.path || 'Not saved yet'}</small></div></div>
           <div class="bs-actions">
             {f.path && <button class="btn" onClick={() => native.showInFolder(f.path)}><Icon name="folder-open" size={15} />Open file location</button>}
             <button class="btn" onClick={() => F.saveAs()}><Icon name="save-all" size={15} />Save a copy…</button>
@@ -294,6 +294,8 @@ function ExportPage () {
     </div>
   )
 }
+// each language in its own name, so anyone can find theirs
+const LANGUAGES = [['en', 'English'], ['bg', 'Български'], ['da', 'Dansk'], ['de', 'Deutsch'], ['el', 'Ελληνικά'], ['es', 'Español'], ['fr', 'Français'], ['it', 'Italiano'], ['mk', 'Македонски'], ['hu', 'Magyar'], ['nb', 'Norsk bokmål'], ['pt-BR', 'Português (Brasil)'], ['pt-PT', 'Português (Portugal)'], ['ro', 'Română'], ['ru', 'Русский'], ['sr', 'Srpski'], ['fi', 'Suomi'], ['sv', 'Svenska'], ['tr', 'Türkçe'], ['uk', 'Українська'], ['ja', '日本語'], ['zh', '中文（简体）']].map(([value, label]) => ({ value, label }))
 function OptionsPage () {
   const s = settings.value
   const set = patch => { setSetting(patch); if ('autosaveMinutes' in patch) F.startAutosave() }
@@ -303,6 +305,7 @@ function OptionsPage () {
       <section class="bs-sec">
         <h3>General</h3>
         <Field label="Interface"><Select value={s.theme || 'dark'} onChange={v => setUiTheme(v)} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'system', label: 'Same as Windows' }]} /></Field>
+        <Field label="Language"><Select value={s.language || 'auto'} onChange={v => { set({ language: v }); toast('Restart Prizma to use the new language.') }} options={[{ value: 'auto', label: 'Same as Windows' }, ...LANGUAGES]} /></Field>
         <Field label="Your name"><TextInput value={s.author || ''} placeholder={appInfo.value.userName} onChange={v => set({ author: v })} /></Field>
         <Field label="Measurement units"><Select value={s.units || 'cm'} onChange={v => set({ units: v })} options={[{ value: 'cm', label: 'Centimeters' }, { value: 'in', label: 'Inches' }, { value: 'pt', label: 'Points' }]} /></Field>
         <Check label="Show the start screen when Prizma opens" checked={s.showStart !== false} onChange={v => set({ showStart: v })} />

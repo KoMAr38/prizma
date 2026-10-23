@@ -1,7 +1,7 @@
 {
   "name": "prizma",
   "productName": "Prizma",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Prizma — presentation studio",
   "author": "Marko Veselinović",
   "license": "UNLICENSED",
@@ -123,7 +123,8 @@
       "displayName": "Prizma",
       "backgroundColor": "transparent",
       "languages": [
-        "en-US"
+        "en-US", "sv-SE", "da-DK", "de-DE", "el-GR", "it-IT", "fr-FR", "ja-JP", "zh-CN", "pt-BR", "es-ES",
+        "pt-PT", "ru-RU", "uk-UA", "mk-MK", "hu-HU", "bg-BG", "ro-RO", "tr-TR", "fi-FI", "nb-NO", "sr-Latn-RS"
       ],
       "minVersion": "10.0.17763.0",
       "maxVersionTested": "10.0.26100.0"

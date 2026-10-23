@@ -1,4 +1,5 @@
 // Window-level apps for the slide show, presenter view, reading view and the picture-capture helper.
+import { t } from '../i18n.js'
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'preact/hooks'
 import { Show, buildGroups } from './Show.jsx'
 import { adoptMedia, native } from '../core/store.js'
@@ -45,7 +46,7 @@ export function ShowApp () {
     return () => ch2.close()
   }, [])
   if (!ctx) return <NoContext />
-  document.title = 'Prizma Slide Show'
+  document.title = t('Prizma Slide Show')
   const secs = Math.floor((Date.now() - t0) / 1000)
   return (
     <>
@@ -106,7 +107,7 @@ export function PresenterApp () {
     return () => window.removeEventListener('keydown', key)
   }, [])
   if (!ctx) return <NoContext />
-  document.title = 'Prizma Presenter View'
+  document.title = t('Prizma Presenter View')
   const d = ctx.doc
   const s = d.slides[state.i]
   const groups = s ? buildGroups(s).filter((g, gi) => !(gi === 0 && g.auto)) : []
@@ -188,7 +189,7 @@ export function ReadingApp () {
     return () => ctl.removeEventListener('message', on)
   }, [])
   if (!ctx) return <NoContext />
-  document.title = 'Prizma Reading View'
+  document.title = t('Prizma Reading View')
   const d = ctx.doc
   const end = res => { ctx.onEnd({ ...(res || {}), last: last.current }); setTimeout(() => window.close(), 30) }
   return (

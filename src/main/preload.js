@@ -5,6 +5,7 @@ const invoke = (ch, ...a) => ipcRenderer.invoke(ch, ...a).catch(e => { throw new
 
 contextBridge.exposeInMainWorld('prizmaNative', {
   platform: process.platform,
+  i18n: ipcRenderer.sendSync('i18n:get'), // { lang, dict }: needed before the first render
   init: () => invoke('app:init'),
   openDialog: o => invoke('dialog:open', o),
   saveDialog: o => invoke('dialog:save', o),

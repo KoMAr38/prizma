@@ -47,7 +47,7 @@
   --r: 8px;
   --r-lg: 12px;
   --r-xl: 16px;
-  --font: 'Manrope Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font: 'Manrope Variable', 'Segoe UI Variable Text', 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', 'Microsoft YaHei UI', system-ui, sans-serif;
   --brand: 'Unbounded Variable', 'Manrope Variable', sans-serif;
 }
 :root[data-ui="light"] {

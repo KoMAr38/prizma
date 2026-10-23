@@ -412,8 +412,8 @@ export function CommentsPane () {
           <div key={c.id} class={'cm' + (c.el && selection.value.includes(c.el) ? ' cur' : '')} onClick={() => c.el && s && findEl(s, c.el) && select([c.el])}>
             <span class="avatar">{(c.author || '?').slice(0, 1).toUpperCase()}</span>
             <div class="cm-main">
-              <div class="cm-head"><b>{c.author}</b><span>{ago(c.time)}</span><button class="cm-del" onClick={e => { e.stopPropagation(); A.deleteComment(c.id) }} data-tip="Delete comment"><Icon name="trash-2" size={13} /></button></div>
-              <div class="cm-text">{c.text}</div>
+              <div class="cm-head"><b translate="no">{c.author}</b><span>{ago(c.time)}</span><button class="cm-del" onClick={e => { e.stopPropagation(); A.deleteComment(c.id) }} data-tip="Delete comment"><Icon name="trash-2" size={13} /></button></div>
+              <div class="cm-text" translate="no">{c.text}</div>
               {c.el && <div class="cm-on"><Icon name="corner-down-right" size={12} />On {(() => { const e = s && findEl(s, c.el)?.el; return e ? (e.name || ELEMENT_LABEL[e.type]) : 'a deleted object' })()}</div>}
             </div>
           </div>

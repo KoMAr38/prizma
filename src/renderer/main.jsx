@@ -1,5 +1,6 @@
 // Entry point: one bundle serves the editor and every helper window, chosen by the URL hash.
 import { render, options } from 'preact'
+import './i18n.js' // before any component, so every label is translated
 import '@fontsource-variable/manrope'
 import '@fontsource-variable/unbounded'
 import './styles/slide.css'
