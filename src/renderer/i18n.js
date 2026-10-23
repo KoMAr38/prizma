@@ -26,7 +26,7 @@ export function t (s) {
   else if (/[A-Za-z]{2}/.test(s)) {
     for (const p of patterns) {
       const m = p.re.exec(s)
-      if (m) { r = p.out.replace(/\{(\d)\}/g, (_, n) => m[p.order.indexOf(+n) + 1] ?? ''); break }
+      if (m) { r = p.out.replace(/\{(\d)\}/g, (_, n) => t(m[p.order.indexOf(+n) + 1] ?? '')); break }
     }
   }
   if (memo.size < 5000) memo.set(s, r)
