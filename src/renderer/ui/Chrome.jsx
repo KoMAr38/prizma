@@ -110,7 +110,7 @@ export function StatusBar () {
   return (
     <footer class="statusbar">
       <div class="sb-left">
-        <span class="sb-txt">Slide {slideIdx.value + 1} of {n}</span>
+        <span class="sb-txt">{`Slide ${slideIdx.value + 1} of ${n}`}</span>
         {s?.hidden && <span class="sb-chip"><Icon name="eye-off" size={12} />Hidden</span>}
         {d.theme?.name && <span class="sb-txt sb-dim">{d.theme.id === 'imported' ? 'Imported design' : d.theme.name}</span>}
       </div>

@@ -127,7 +127,7 @@ export function PresenterApp () {
           <button onClick={() => setElapsed(0)} data-tip="Restart timer"><Icon name="rotate-ccw" size={15} /></button>
         </div>
         <div class="pv-clock">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-        <div class="pv-count">Slide {state.i + 1} of {d.slides.length}</div>
+        <div class="pv-count">{`Slide ${state.i + 1} of ${d.slides.length}`}</div>
         <button class="btn" onClick={() => cmd('end')}><Icon name="x" size={15} />End slide show</button>
       </header>
       <main class="pv-main">
@@ -198,7 +198,7 @@ export function ReadingApp () {
         <Show doc={d} start={ctx.start} master channel={channel} mode="reading" fit={box} settings={{ ...ctx.settings, endBlack: false }} toolbar={false} onEnd={end} />
       </div>
       <footer class="reading-bar">
-        <span>Slide {st.i + 1} of {d.slides.length}</span>
+        <span>{`Slide ${st.i + 1} of ${d.slides.length}`}</span>
         <span class="rtabs-fill" />
         <button onClick={() => ctl.postMessage({ type: 'cmd', cmd: 'prev' })} data-tip="Previous"><Icon name="chevron-left" size={18} /></button>
         <button onClick={() => ctl.postMessage({ type: 'cmd', cmd: 'next' })} data-tip="Next"><Icon name="chevron-right" size={18} /></button>
