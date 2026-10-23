@@ -58,7 +58,7 @@ async function handleEnd (res) {
   const ink = res.ink || {}
   const withInk = Object.entries(ink).filter(([, v]) => v && v.length)
   if (withInk.length) {
-    const keep = await confirmDialog({ title: 'Keep your ink annotations?', text: `You drew on ${withInk.length} slide${withInk.length === 1 ? '' : 's'} during the show. Keep the drawings on the slides?`, buttons: [{ id: 'keep', label: 'Keep', primary: true }, { id: 'discard', label: 'Discard' }] })
+    const keep = await confirmDialog({ title: 'Keep your ink annotations?', text: withInk.length === 1 ? 'You drew on 1 slide during the show. Keep the drawings on the slides?' : `You drew on ${withInk.length} slides during the show. Keep the drawings on the slides?`, buttons: [{ id: 'keep', label: 'Keep', primary: true }, { id: 'discard', label: 'Discard' }] })
     if (keep === 'keep') {
       update(dd => {
         for (const [sid, strokes] of withInk) {

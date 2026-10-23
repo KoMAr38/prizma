@@ -584,7 +584,7 @@ function FindPanel ({ replace: withReplace }) {
     }
     next()
   }
-  const all = () => { finishEditing(); const n = A.replaceAll(q, r, { matchCase: mc, wholeWord: ww }); setMsg(n ? `Replaced ${n} occurrence${n === 1 ? '' : 's'}.` : `“${q}” wasn't found.`) }
+  const all = () => { finishEditing(); const n = A.replaceAll(q, r, { matchCase: mc, wholeWord: ww }); setMsg(n === 1 ? 'Replaced 1 occurrence.' : n ? `Replaced ${n} occurrences.` : `“${q}” wasn't found.`) }
   return (
     <div class="findpanel" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); closeDialog() } }}>
       <div class="dlg-h"><h2>{rep ? 'Replace' : 'Find'}</h2><button class="pane-x" aria-label="Close" onClick={closeDialog}><Icon name="x" size={16} /></button></div>

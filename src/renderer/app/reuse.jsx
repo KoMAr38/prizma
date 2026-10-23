@@ -61,7 +61,7 @@ function ReuseDlg ({ src, name, drop }) {
     })
     closeDialog()
     goSlide(at)
-    toast(`${chosen.length} slide${chosen.length === 1 ? '' : 's'} inserted from ${name}. They now use this presentation's theme.`)
+    toast(chosen.length === 1 ? `1 slide inserted from ${name}. They now use this presentation's theme.` : `${chosen.length} slides inserted from ${name}. They now use this presentation's theme.`) // whole sentences so other languages can pluralise
   }
   const all = new Set(src.slides.map(s => s.id))
   const tw = 176
@@ -70,7 +70,7 @@ function ReuseDlg ({ src, name, drop }) {
       footer={<>
         <span class="dlg-hint">{picked.size ? `${picked.size} selected` : 'Click slides to select them'}</span>
         <button class="btn" onClick={() => insert(all)}>Insert all</button>
-        <button class="btn btn-primary" disabled={!picked.size} onClick={() => insert(picked)}>Insert {picked.size || ''} slide{picked.size === 1 ? '' : 's'}</button>
+        <button class="btn btn-primary" disabled={!picked.size} onClick={() => insert(picked)}>{picked.size === 1 ? 'Insert 1 slide' : picked.size ? `Insert ${picked.size} slides` : 'Insert slides'}</button>
       </>}>
       <div class="reuse-grid">
         {src.slides.map((s, i) => (

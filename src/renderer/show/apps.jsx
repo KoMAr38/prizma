@@ -151,7 +151,7 @@ export function PresenterApp () {
           <div class="pv-next">
             <div class="pv-lbl">{nextLabel}</div>
             {state.step < groups.length
-              ? <div class="pv-nextanim" style={{ width: nw + 'px', height: nw * H / W + 'px' }}><Icon name="sparkles" size={26} /><span>{groups.length - state.step} animation{groups.length - state.step === 1 ? '' : 's'} left on this slide</span></div>
+              ? <div class="pv-nextanim" style={{ width: nw + 'px', height: nw * H / W + 'px' }}><Icon name="sparkles" size={26} /><span>{groups.length - state.step === 1 ? '1 animation left on this slide' : `${groups.length - state.step} animations left on this slide`}</span></div>
               : next
                 ? <div class="pv-thumb" style={{ width: nw + 'px', height: nw * H / W + 'px' }}><div style={{ transform: `scale(${nk})`, transformOrigin: '0 0' }}><SlideView slide={next} docObj={d} mode="thumb" index={ni} ctx="pvn" /></div></div>
                 : <div class="pv-nextanim" style={{ width: nw + 'px', height: nw * H / W + 'px' }}><span>End of slide show</span></div>}
